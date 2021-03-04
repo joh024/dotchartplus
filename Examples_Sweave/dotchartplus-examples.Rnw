@@ -1,0 +1,540 @@
+\documentclass{article}
+\usepackage{Sweave}
+\setkeys{Gin}{width=\textwidth}
+%\SweaveOpts{width=7.5,height=9.5}
+\usepackage{cprotect}
+\usepackage{amsmath}
+\begin{document}
+<<echo=FALSE>>=
+layout.show2 = function(n = 1){
+  opar = par(mar = rep(0, 4))
+  on.exit(par(opar))
+  for (i in seq_len(n)) {
+    plot.new()
+    box()
+    text(0.5, 0.5, i)
+  }
+}
+sumlcm = function(...)
+  lcm(do.call(sum, lapply(list(...), function(x)
+                          as.numeric(sub(" cm", "", x)))))
+jg = jg[c(TRUE, FALSE, FALSE, FALSE),]
+#taxesSub = sort(taxes, TRUE)[5:1]
+taxesSub = taxes[c(FALSE, FALSE, FALSE, FALSE, TRUE)]
+DefaultParslist$pbg = c("black", "white")
+DefaultParslist$cex = 1
+@
+% Intro Ex1 - simple dotchart
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE, width=5, height=4>>=
+dotchartplus(taxesSub, xlim = c(400, 800))
+@ 
+\caption{A simple dotchart. The data plots per capita taxes in 1980
+  by states in the United States. The position of the points indicate
+  the data values, while the lines help connect the points to their
+  labels. For the complete plot refer to the Demonstration Document.
+}
+\label{fig:simple.dot}
+\end{figure}
+\clearpage
+
+% Parent args help
+\begin{figure}[htb]
+<<echo=FALSE>>=
+datlist = list(matrix(1:6, nr = 3))
+rownames(datlist[[1]]) = paste("A", 1:3, sep = "")
+@ 
+<<echo=TRUE, fig=TRUE, width=5, height=5>>=
+datlist
+dotchartplus(datlist)
+@ 
+\cprotect\caption{A simple example to demonstrate what \verb|datlist|
+  looks like. Our \verb|datlist| contains 1 group and 2 sets of data.
+  Each set has 3 data points.
+}
+\label{fig:argshelp2}
+\end{figure}
+\begin{figure}[htb]
+<<echo=FALSE>>=
+datlist = list("Group A" = matrix(1:6, nr = 3))
+colnames(datlist[[1]]) = c("black", "white")
+textlist = list(matrix(c(c("Some", "Made-up", "Data"),
+  paste("A", 1:3, sep = "")), nr = 3))
+@ 
+<<echo=TRUE, fig=TRUE>>=
+datlist
+textlist
+dotchartplus(datlist, textlist, adj = c(1, 0))
+@ 
+\cprotect\caption{Another example to demonstrate what \verb|datlist|
+  looks like. Here we use a separate \verb|textlist| to specify more
+  than 1 column of text labels.
+}
+\label{fig:argshelp2}
+\end{figure}
+\clearpage
+
+% Layout Ex1
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+demo2out = dotchartplus.demo2(cex = 0.8)
+getlay = demo2out$layout
+getpl = demo2out$parslist
+jg$science = factor(jg$science,
+  levels = c("Natural", "Mathematical", "Social"))
+jg.sort = jg[order(jg$area),]
+jg.textlist = split(jg.sort[,1:2], jg.sort$science)
+jg.datlist = split(jg.sort[,4], jg.sort$science)
+@
+\cprotect\caption{A reproduction of Figure 3.26 in The Elements of
+  Graphing Data (Cleveland, 1985, p145).
+  There are some minor differences, most notably in the positioning of
+  the group labels. This dotchart showcases many features of
+  \verb|dotchartplus| and will be used alongside the code to
+  graphically explain the purpose of the code.
+}
+\label{fig:demo2}
+\end{figure}
+\clearpage
+
+% Newlay code
+<<echo=FALSE>>=
+getlay = LHshift(getlay, 4)
+
+laymat = getmat(getlay)
+laywid = getwid(getlay)
+layhei = gethei(getlay)
+
+## add col
+newmat = laymat[,1]
+newwid = laywid[1]
+padvec = rep(0, nrow(laymat))
+
+cind = c(2, 3, 4, 5)
+for(j in 1:3){
+  newmat = cbind(newmat, padvec,
+    if(j > 1 && j < 3) padvec else NULL,
+    laymat[,cind[j]:(cind[j + 1] - 1)], deparse.level = 0)
+  newwid = c(newwid, lcm(10^-8),
+    if(j > 1 && j < 3) lcm(10^-8) else NULL,
+    laywid[cind[j]:(cind[j + 1] - 1)])
+}
+laymat = newmat
+laywid = newwid
+
+## add row
+newmat = laymat[1:2,]
+newhei = layhei[1:2]
+padvec = c(0, NA, 0, NA, NA, 0, NA, 0)
+
+rind = c(3, 4, 10, 11, 13)
+for(i in 1:4){
+  newmat = rbind(newmat, padvec,
+    if(i > 1 && i < 4) padvec else NULL,
+    laymat[rind[i]:(rind[i + 1] - 1),], deparse.level = 0)
+  newhei = c(newhei, lcm(10^-8),
+    if(i > 1 && i < 4) lcm(10^-8) else NULL,
+    layhei[rind[i]:(rind[i + 1] - 1)])
+}
+laymat = newmat
+layhei = newhei
+
+## replace NAs with actual numbers
+laymat[3, ] = c(0, 14, 0, 14, 4, 0, 4, 0)
+laymat[5, ] = c(0, 14, 0, 14, 4, 0, 4, 0)
+laymat[6, ] = c(0,  3, 0,  3, 1, 0, 1, 0)
+laymat[13,] = c(0,  3, 0,  3, 1, 0, 1, 0)
+laymat[14,] = c(0, 13, 0, 13, 2, 0, 2, 0)
+laymat[16,] = c(0, 13, 0, 13, 2, 0, 2, 0)
+
+## 0 region for labels
+laymat[17, 3] = 15
+laymat[2, 3] = 16
+
+newlay = newlayout(laymat, laywid, layhei)
+
+## set colours
+colwork = "#FFFFBB"
+coldone = "#999999"
+@
+
+% Layout Ex1 cont
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+plot.new()
+for(i in 1:3){
+  plot.new()
+  box()
+  text(0.5, 0.5, 0)
+}
+par(opar)
+layout.show2(8)
+@
+\caption{A representation of the layout used to create Figure
+  \ref{fig:demo2}. Note that a modified form of \texttt{layout.show} was
+  used to show certain 0 regions, as these spaces will be used to plot
+  the axes using \texttt{axis} and \texttt{mtext}.}
+\label{fig:demo2lay}
+\end{figure}
+\clearpage
+
+% Layout Ex2 - plot layout
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+plot.new()
+for(i in 1:3){
+  plot.new()
+  box()
+  text(0.5, 0.5, 0)
+}
+indwork = 1:2
+inddone = 0
+for(i in 1:8){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  if(any(indwork == i))
+    rect(0, 0, 1, 1, col = colwork, border = NA)
+  if(any(inddone == i))
+    rect(0, 0, 1, 1, col = coldone, border = NA)
+  box()
+  text(0.5, 0.5, i)
+}
+par(opar)
+@
+\cprotect\caption{To create the main plot area with group labels,
+  we first create a single `panel' (called \verb|vlay| in the code),
+  which consists of the actual plot area and a group label area above
+  it. This is shown as the highlighted area in our figure.
+}
+\end{figure}
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+plot.new()
+for(i in 1:3){
+  plot.new()
+  box()
+  text(0.5, 0.5, 0)
+}
+indwork = 3:6
+inddone = 1:2
+for(i in 1:8){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  if(any(indwork == i))
+    rect(0, 0, 1, 1, col = colwork, border = NA)
+  if(any(inddone == i))
+    rect(0, 0, 1, 1, col = coldone, border = NA)
+  box()
+  text(0.5, 0.5, i)
+}
+par(opar)
+@
+\cprotect\caption{Once a single `panel' is created, it's easy to
+  replicate this to the required dimensions (3 in our case) using the
+  Layout Helper library's \verb|rep| method for layout objects.
+  The darker highlighted area represents what we have (\verb|vlay|),
+  while the lighter highlighted areas represent what \verb|rep| will
+  add (together, the highlighted areas represent our current layout,
+  called \verb|ulay| in the code).
+  We have one more step, which is to add the correct \verb|heights|.
+  This completes our \verb|laymat| for the plot region.}
+\end{figure}
+\clearpage
+
+% Layout Ex3 - axes layout
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+plot.new()
+plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+rect(0, 0, 1, 1, col = coldone, border = NA)
+indwork = 1
+inddone = 0
+for(i in 1:3){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  if(any(indwork == i))
+    rect(0, 0, 1, 1, col = colwork, border = NA)
+  if(any(inddone == i))
+    rect(0, 0, 1, 1, col = coldone, border = NA)
+  box()
+  text(0.5, 0.5, 0)
+}
+layout.show2(8)
+par(opar)
+@
+\cprotect\caption{Attaching an axis area is easy, the bind methods for
+  layout objects automatically stretch as necessary, so we can simply
+  bind a $1\times1$ layout object with the correct \verb|widths| or
+  \verb|height|, without having to factor in the dimensions of our
+  current layout.}
+\end{figure}
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+plot.new()
+plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+rect(0, 0, 1, 1, col = coldone, border = NA)
+indwork = 2
+inddone = 1
+for(i in 1:3){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  if(any(indwork == i))
+    rect(0, 0, 1, 1, col = colwork, border = NA)
+  if(any(inddone == i))
+    rect(0, 0, 1, 1, col = coldone, border = NA)
+  box()
+  text(0.5, 0.5, 0)
+}
+layout.show2(8)
+for(i in 2:2){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  if(any(indwork == i))
+    rect(0, 0, 1, 1, col = colwork, border = NA)
+  if(any(inddone == i))
+    rect(0, 0, 1, 1, col = coldone, border = NA)
+  box()
+  text(0.5, 0.5, 0)
+}
+par(opar)
+@
+\caption{The same process as before works for attaching further axis
+  regions, again because the bind methods automatically stretch to
+  the required dimensions.}
+\end{figure}
+\clearpage
+
+% Layout Ex4 - label layout
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+plot.new()
+plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+rect(0, 0, 1, 1, col = coldone, border = NA)
+for(i in 1:3){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  rect(0, 0, 1, 1, col = coldone, border = NA)
+  box()
+  text(0.5, 0.5, 0)
+}
+layout.show2(6)
+for(i in 7){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  rect(0, 0, 1, 1, col = colwork, border = NA)
+  box()
+  text(0.5, 0.5, i)
+}
+for(i in 8){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  box()
+  text(0.5, 0.5, i)
+}
+for(i in 1:2){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  rect(0, 0, 1, 1, col = coldone, border = NA)
+  box()
+  text(0.5, 0.5, 0)
+}
+plot.new()
+plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+rect(0, 0, 1, 1, col = colwork, border = NA)
+box()
+text(0.5, 0.5, 0)
+plot.new()
+plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+box()
+text(0.5, 0.5, 0)
+par(opar)
+@
+\caption{Attaching the label regions is slightly more complex than the
+  axis regions because we can't simply stretch to fit. We require our
+  labels to be centred on the plot region, and a simple stretch would
+  in fact centre it over both the plot and the axis region.}
+\end{figure}
+\clearpage
+
+% Plot Ex1 - plot points
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+plot.new()
+for(i in 1:3){
+  plot.new()
+  box()
+  text(0.5, 0.5, 0)
+}
+dotchartplus(jg.datlist[1], jg.textlist,
+     axes = 0, newlayout = FALSE, grouplabel = FALSE,
+     lab1 = NULL, lab3 = NULL, parslist = getpl)
+for(i in 2:8){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  box()
+  text(0.5, 0.5, i)
+}
+par(opar)
+@
+\caption{The plot so far. We have only drawn the points and dotted
+  lines, but the layout has also been drawn to some extent for
+  reference. In truth, this page should be blank except for the points
+  and dotted lines.}
+\end{figure}
+\clearpage
+
+% Plot Ex2 - plot numerical axes
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+plot.new()
+for(i in 1:2){
+  plot.new()
+  box()
+  text(0.5, 0.5, 0)
+}
+plot.new()
+dotchartplus(jg.datlist[1], jg.textlist,
+     axes = 3, newlayout = FALSE, grouplabel = "", grouplabbg = 0,
+     lab1 = NULL, lab3 = NULL, parslist = getpl)
+for(i in 3:8){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  box()
+  text(0.5, 0.5, i)
+}
+par(opar)
+@
+\caption{The plot so far. We have drawn the points, dotted lines
+  and the numerical axis. Because there are group labels, we had to
+  `jump' over it when plotting the numerical axis.
+}
+\end{figure}
+\clearpage
+
+% Plot Ex3 - plot text axes
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+for(i in 1:2)
+  plot.new()
+box()
+text(0.5, 0.5, 0)
+## Code for txtjump explanation
+plot.new()
+txtlabxv = as.numeric(sub(" cm", "", getpl$labwidths))
+txtlabxv = with(getpl, c(fpad, txtlabxv[1] - fpad,
+  fpad, txtlabxv[2] - fpad, fpad))
+plot.window(xlim = c(0, sum(txtlabxv)), ylim = c(0.5, 15.5),
+            xaxs = "i", yaxs = "i")
+par(cex = 0.8)
+abline(v = 0, lty = "14")
+abline(v = sum(txtlabxv[1:1]), lty = "14")
+abline(v = sum(txtlabxv[1:2]), lty = "14")
+abline(v = sum(txtlabxv[1:3]), lty = "14")
+abline(v = sum(txtlabxv[1:4]), lty = "14")
+abline(v = sum(txtlabxv[1:5]), lty = "14")
+arrows(sum(txtlabxv), 1, 0, 1, length = 0.1)
+text(txtlabxv[1] * 1.5, 1.15, "sum(labwidths) + fpad", adj = c(0, 0))
+arrows(txtlabxv[1], 2, sum(txtlabxv[1:2]), 2, length = 0.1, code = 3)
+text(txtlabxv[1] * 2, 2.15, "labwidths[1] - fpad", adj = c(0, 0))
+arrows(0, 3, sum(txtlabxv[1:3]), 3, length = 0.1)
+text(txtlabxv[1] * 2.5, 3.15, "fpad + labwidths[1]", adj = c(0, 0))
+arrows(sum(txtlabxv[1:3]), 4, sum(txtlabxv[1:4]), 4, length = 0.1,
+       code = 3)
+text(sum(txtlabxv) - txtlabxv[1] * 1.5, 4.35,
+     "labwidths[2] - fpad", adj = c(1, 0))
+arrows(txtlabxv[1], 5, sum(txtlabxv), 5, length = 0.1, code = 3)
+text(txtlabxv[1] * 3, 5.15, "sum(labwidths)", adj = c(0, 0))
+## End txtjump explanation
+plot.new()
+dotchartplus(jg.datlist[1], jg.textlist,
+     axes = 2:3, newlayout = FALSE, grouplabel = "", grouplabbg = 0,
+     lab1 = NULL, lab3 = NULL, parslist = getpl)
+for(i in 3:8){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  box()
+  text(0.5, 0.5, i)
+}
+par(opar)
+@
+\caption{The plot so far. We have drawn the points, dotted lines,
+  numerical axis and text labels.
+  This figure also includes some visual aids to better understand
+  how the text label area is divided into columns for the text.
+}
+\end{figure}
+\clearpage
+
+% Plot Ex4 - plot grouplabel
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+for(i in 1:2)
+  plot.new()
+box()
+text(0.5, 0.5, 0)
+for(i in 1:2)
+  plot.new()
+dotchartplus(jg.datlist[1], jg.textlist, grouplabel = "Natural",
+     axes = 2:3, newlayout = FALSE, lab1 = NULL, lab3 = NULL,
+             parslist = getpl)
+for(i in 3:8){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  box()
+  text(0.5, 0.5, i)
+}
+par(opar)
+@
+\caption{The plot so far. We have drawn the points, dotted lines,
+  numerical axis, text labels and group label. We now need to loop
+  through the remaining panels.
+}
+\end{figure}
+\clearpage
+
+% Plot Ex5 - plot xlab
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+opar = par(mar = rep(0, 4))
+for(i in 1:4)
+  plot.new()
+dotchartplus(jg.datlist, jg.textlist,
+     axes = 1:3, newlayout = FALSE,
+             lab1 = "Graph Area (Fraction of Total)", lab3 = NULL,
+             parslist = getpl)
+for(i in 8){
+  plot.new()
+  plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+  box()
+  text(0.5, 0.5, i)
+}
+par(opar)
+@
+\caption{The plot so far. Having looped through all the panels,
+  it's now time to finish off the plot by drawing in the axis
+  labels.
+}
+\end{figure}
+\clearpage
+\end{document}

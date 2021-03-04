@@ -1,0 +1,421 @@
+\documentclass{article}
+\usepackage{Sweave}
+\setkeys{Gin}{width=\textwidth}
+\SweaveOpts{width=6,height=7}
+\usepackage{cprotect}
+\usepackage{amsmath}
+\begin{document}
+<<echo=FALSE>>=
+jg$science = factor(jg$science,
+        levels = c("Natural", "Mathematical", "Social"))
+jg = jg[c(FALSE, FALSE, TRUE),]
+mother.tongue = mother.tongue[c(1:2, 10, 11, 16)]
+taxes = taxes[c(rep(c(TRUE, FALSE), length = 42),
+  rep(c(FALSE, TRUE), length = 48 - 42))]
+#animalSpeed = animalSpeed[c(rep(c(TRUE, FALSE), length = 32),
+#  c(TRUE, FALSE, TRUE, TRUE))]
+DefaultParslist$pbg = "black"
+DefaultParslist$cex = 0.8
+@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Dotchart vs Standard
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Dotchart vs Barplot
+<<echo=FALSE>>=
+layone = dotchartplus(rev(mother.tongue), xlim = c(0, 1050), xaxs = "i",
+  xlab = "Number of Speakers (Millions)", axes = 1:2)$layout
+laytwo = dotchartplus(rev(mother.tongue), xlim = c(0, 1050), xaxs = "i",
+  xlab = "Number of Speakers (Millions)", axes = 2:3)$layout
+newlay = rbind(LHshift(laytwo), layone)
+@ 
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(newlay)
+dotchartplus(rev(mother.tongue), xlim = c(0, 1050), xaxs = "i",
+             xlab = "Number of Speakers (Millions)", axes = 1:2,
+             newlayout = FALSE)
+dotchartplus(rev(mother.tongue), xlim = c(0, 1050), xaxs = "i",
+             xlab = "Number of Speakers (Millions)", axes = 2:3,
+             lfunc = lfuncBar, lcol = "grey", lty = 1,
+             pfunc = idnfunc, newlayout = FALSE)
+@
+\cprotect\caption{The numerical axis starts at 0 because the barplot is
+  only meaningful when the length of the bars correspond to the data
+  values.
+  A dotchart can convey the same information, but with less ink.
+  The call is:\newline
+  \verb|dotchartplus(rev(mother.tongue))|
+}
+\label{fig:dotvsbar1}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE, height=4>>=
+dotchartplus.demo1.xlim()
+@
+\end{figure}
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE, height=4>>=
+dotchartplus.demo1.log()
+@
+\cprotect\caption{Unlike the barplot, a dotchart has flexibility on
+  the numerical axis. This can include having breaks in the axis (top)
+  or using a log scale (bottom). These types of plots are inappropriate
+  as barplots.
+  The calls are:\newline
+  \verb|dotchartplus(rev(mother.tongue), xlim = list(c(0, 400), c(980, 1020)))|\newline
+  \verb|dotchartplus(rev(log2(mother.tongue))|
+}
+\label{fig:dotvsbar2}
+\end{figure}
+\clearpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Dotchart vs Population Pyramid
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+ppyramid.test(12, col = c("lightblue", "pink"),
+              cex = DefaultParslist$cex)
+@
+\caption{A population pyramid is often used to display the
+  distribution of the population across age groups and gender.
+  In a growing population, the result looks like a pyramid as there
+  will be less people as you move up the age groups.
+  Unfortunately, the numerical axes for Male and Female go in opposite
+  directions, which can make direct comparisons between the two
+  difficult. The reader must frequently consult the axis labels.
+}
+\label{fig:ppyramid}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+dotchartplus(nzpoplist[[12]], col = c("lightblue", "pink"),
+             xlab = "Population Size in Thousands - New Zealand, 2006")
+@
+\cprotect\caption{A dotchart provides an alternative to the population
+  pyramid and has the advanage of being able to superpose multiple
+  \emph{sets} of data on a single plot. This makes direct comparisons
+  between the two genders at each age group incredibly easy.
+  The call is:\newline
+  \verb|dotchartplus(nzpoplist[[12]], col = c("lightblue", "pink"))|
+}
+\label{fig:dotvsppyramid}
+\end{figure}
+\clearpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Dotchart vs Piechart
+<<echo=FALSE>>=
+VASub = apply(VADeaths, 1, sum)
+VASub = VASub / sum(VASub)
+names(VASub) = LETTERS[1:5]
+VAdcp = dotchartplus(list(VASub), widths = 1, heights = 1)$layout
+VALayout = rbind(newlayout(getmat(VAdcp) * 0 + 1, getwid(VAdcp),
+  gethei(VAdcp)), LHshift(VAdcp, 1))
+VAcolvec = c("lightblue", "mistyrose", "lightcyan", "lavender",
+  "cornsilk")
+@ 
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE, height=8>>=
+LHcall(VALayout)
+opar = par(mar = rep(0, 4))
+pie(VASub, col = VAcolvec)
+dotchartplus(VASub, newlayout = FALSE, xlim = c(0, 0.45), xaxs = "i")
+par(opar)
+@
+\caption{A piechart is a common tool for examining proportions.
+  However, comparisons between slices require comparisons of angles or
+  areas. These are far less accurate than judgements on lengths.
+  This data happens to have the values sorted in ascending
+  order, thus it is clear that group B has a larger proportion than
+  group A even on the piechart.
+}
+\label{fig:dotvspie1}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE, height=8>>=
+LHcall(VALayout)
+opar = par(mar = rep(0, 4))
+pie(VASub[c(1, 3, 5, 2, 4)], col = VAcolvec[c(1, 3, 5, 2, 4)])
+dotchartplus(VASub[c(1, 3, 5, 2, 4)], xlim = c(0, 0.45), xaxs = "i",
+     newlayout = FALSE)
+par(opar)
+@
+\caption{However, when the data is not sorted, it is not so easy
+  to determine which is the larger proportion on the piechart.
+  In contrast, the dotchart gives accurate readings of the actual
+  proportions regardless of whether or not the data is sorted.
+  It should also be noted that a piechart must be a perfect circle,
+  an ellipse is not a proper piechart. This is a cumbersome restriction
+  that the dotchart does not have.
+}
+\label{fig:dotvspie2}
+\end{figure}
+\clearpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Dotchartplus vs Dotchart and Dotplot
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Ross's Dotchart
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+dotchart(VADeaths, bg = "black")
+@
+\cprotect\caption{R's built-in \verb|dotchart| function is a perfectly
+  good function for plotting basic dotcharts. It also has the capacity
+  to juxtapose \emph{groups} of data. Refer to \verb|help(dotchart)|
+  for more information.
+  The call is:\newline
+  \verb|dotchart(VADeaths)|
+}
+\label{fig:rossdot}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+dotchartplus(data.frame(VADeaths), rep(list(row.names(VADeaths)), 4))
+@
+\cprotect\caption{While there are some stylistic differences,
+  \verb|dotchartplus| is capable of doing everything \verb|dotchart|
+  can, and more.
+  It's worth noting that the handling of \verb|matrix| inputs differ
+  between the two functions. In \verb|dotchart|, columns of a
+  \verb|matrix| are taken to mean \emph{groups} of data to juxtapose.
+  In \verb|dotchartplus|, columns are taken to mean \emph{sets} of
+  data to superpose. To juxtapose in \verb|dotchartplus|, the data
+  should be organised into a \verb|list|, where each element of the
+  \verb|list|  are taken to mean \emph{groups} of data to juxtapose.
+  Equivalently, a \verb|data.frame| can be used, which has the advantage
+  that the columns of a \verb|data.frame| correspond to \emph{groups}
+  of data. Unfortunately, converting a \verb|matrix| to a
+  \verb|data.frame| will strip the \verb|row.names|, which are used
+  as the text labels.
+  The call is:\newline
+  \verb|dotchartplus(data.frame(VADeaths), rep(list(row.names(VADeaths)), 4)|
+}
+\label{fig:vsrossdot}
+\end{figure}
+\clearpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Lattice Dotplot
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+print(
+dotplot(group ~ freq | as.factor(year) * sex,
+        data = nzpopdf[nzpopdf$year <= 2007 & nzpopdf$year >= 2000,],
+        xlab = "Population Size in Thousands"))
+@
+\cprotect\caption{The \verb|dotplot| function from the `lattice' R
+  package is a powerful function with many capabilities.
+  In particular, it juxtaposes both horizontally and vertically,
+  allowing for it to condition on many factors at the same time.
+  It can also take more than one conditioning variable.
+  Since \verb|dotplot| does these things so well, there is no point in
+  trying to compete with \verb|dotchartplus|.
+  The call is:\newline
+  \verb:dotplot(group ~ freq | as.factor(year) * sex,:\newline
+  \verb|        data = nzpopdf[nzpopdf$year <= 2007 & nzpopdf$year >= 2000,],|
+  \verb|        xlab = "Population Size in Thousands")|
+}
+\label{fig:dotplot}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+dotchartplus(as.character(group) ~ freq,
+             data = nzpopdf[nzpopdf$year == 2006,],
+             xlab = "Population Size in Thousands - 2006")
+@
+\cprotect\caption{There is a note worthy difference in how
+  \verb|dotplot| and \verb|dotchartplus| handle labels.
+  First, \verb|dotchartplus| takes its inputs very literally, so
+  if the labels happen to be a \verb|factor|, it will take these to
+  be integers. The user must manually convert these to \verb|character|
+  by calling \verb|as.character| if they want sensible labels.
+  Further, this `literal' processing means that even if one or more
+  of the labels are the same, \verb|dotchartplus| will simply plot
+  them again. On the other hand, \verb|dotplot| consolidates the labels
+  and will superpose data with the same label (try it yourself using
+  the same call as below, but using \verb|dotplot|).
+  The call is:\newline
+  \verb|dotchartplus(as.character(group) ~ freq,|\newline
+  \verb|             data = nzpopdf[nzpopdf$year == 2006,],|\newline
+  \verb|             xlab = "Population Size in Thousands")|
+}
+\label{fig:dotlabels}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+print(dotplot(journal ~ area | science, data = jg))
+@
+\cprotect\caption{Because \verb|dotplot| juxtaposes horizontally as
+  well as vertically and automatically consolidates labels,
+  it can draw some truly weird graphs as in this figure.
+  \verb|dotplot| expects an observation for each label of every
+  level of the conditioning factor(s), but in this case the conditioning
+  factor is a grouping factor, and there is no overlap in labels.
+  Further, by juxtaposing horizontally, it is harder to compare the
+  values in `Mathematical' to the other two groups.
+  The call is:\newline
+  \verb:dotplot(journal ~ area | science, data = jg):
+}
+\label{fig:dotplotjg}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+dotchartplus.demo2.formula()
+@
+\cprotect\caption{In comparison, \verb|dotchartplus| only juxtaposes
+  vertically and handles labels `literally', making it ideal for
+  plotting this kind of data.
+  However, juxtaposing only vertically limits the number of levels
+  the conditioning factor can have, for the simple reason that
+  eventually the plot will become too squashed.
+  In addition, \verb|dotchartplus| can only handle one conditioning
+  variable, whereas \verb|dotplot| can handle many.
+  Likewise, there are things that \verb|dotchartplus| can do that
+  \verb|dotplot| can't, such as having multiple columns of text labels.
+  \newline
+  The moral of the story is, deciding whether to use \verb|dotplot|
+  or \verb|dotchartplus| should depend on what kind of plot the user
+  desires.
+  The call is:\newline
+  \verb:dotchartplus(journal + subject ~ area | science, data = jg):
+}
+\label{fig:dotchartjg}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\subsection{Demo3}
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+dotchartplus.demo3()
+@
+\cprotect\caption{A plot designed to mimic the dotchart found in
+  \textbf{The Elements of Graphing Data} (Cleveland, 1985, p147).
+  The original data contains 48 states, but for the purposes of this
+  document, only half the states (24) are used.
+  ``When the data are ordered from smallest to largest, the dotchart
+  provides a percentile graph'' (Cleveland, 1985, p147).
+  The call is:\newline
+  \verb|dotchartplus(taxes, percentile = TRUE)|
+}
+\label{fig:demo3}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE>>=
+dotchartplus.demo3(highlight = c(12, 21, 23), pbg = c("white", "black"))
+@
+\cprotect\caption{It is possible to highlight specific points easily in
+  \verb|dotchartplus| using the \verb|highlight| argument.
+  Here we choose to highlight the 3 states on the west coast of the
+  US: Oregon (point 12), Washington (21) and California (23).
+  The \verb|highlight| argument can take a \verb|numeric vector|
+  specifying the indices of the points to highlight.
+  The call is:\newline
+  \verb|dotchartplus(taxes, highlight = c(12, 21, 23))|\newline
+  Note that because the dataset used here is a subset of the full
+  data, the indices of the chosen states will not be the same.
+  They will instead be: Oregon (23), Washington (41), California(46).
+}
+\label{fig:demo3}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\subsection{Demo2}
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE, height=6>>=
+dotchartplus.demo2(highlight = list(matrix(1:9, nrow = 3), 1:2,
+                     matrix(c(0, 0, -3), ncol = 3)),
+                   pbg = c("white", "black"), axes = 1:2)
+@
+\cprotect\caption{This figure is used to demonstrate how to make a
+  more complex call using \verb|highlight|.
+  The call is:\newline
+  \verb|highlight = list(matrix(1:9, nrow = 3),|\newline
+  \verb|                 c(1, 2),|\newline
+  \verb|                 matrix(c(0, 0, -3), ncol = 3)))|\newline
+  Each element of the \verb|list| highlights the matching \emph{group}.
+  For each element of the \verb|list|, one can specify a
+  subsetting \verb|numeric vector|, or multiple \verb|numeric vectors|
+  as columns of a \verb|matrix|.
+  Each column of the \verb|matrix| will specify a distinct highlighting
+  method (to the extent specified in \verb|DefaultParslist|).
+  As a \verb|matrix| requires the same number of rows for each column,
+  one can use \verb|0| as a filler.
+  As with subsetting in R, one can specify a negative index to signify
+  every value except for that index.
+  Full documentation on the usage of \verb|highlight| can be
+  found in the literate document for \verb|dotchartplus|.
+}
+\label{fig:demo2.highlight}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE, height=6>>=
+dotchartplus(journal + subject ~ area + I(area - 1.96 * stderr) +
+             I(area + 1.96 * stderr)| science, data = jg,
+             setslabel = FALSE, axes = 1:2,
+             xlim = c(-.005, 0.35), xaxs = "i",
+             xlab = "Graph Area (Fraction of Total)",
+             adj = c(1, 0), at = (0:3)/10, atsmall = (0:3)/10 + 0.05,
+             pbg = c("white", "black"))
+@
+\cprotect\caption{The data used in Figures \ref{fig:dotchartjg} and
+  \ref{fig:demo2.highlight} also contains a column called
+  \verb|stderr|. Naturally, this makes us want to plot confidence
+  intervals. While a normality assumption may be questionable, we will
+  use it anyway for demonstration purposes. We will do the popular
+  95\% Confidence Interval by taking 1.96 times the standard error on
+  either side.
+  The \verb|formula| method of calling \verb|dotchartplus| allows
+  specification of multiple \emph{sets} of data by simply adding them
+  in using \verb|+|, so plotting the thing isn't too hard,
+  but it certainly doesn't look very good.
+  The call is:\newline
+  \verb|dotchartplus(journal + subject ~ area + I(area - 1.96 * stderr) +|\newline
+  \verb:             I(area + 1.96 * stderr)| science, data = jg):
+}
+\label{fig:demo2.CI1}
+\end{figure}
+
+\begin{figure}[h!]
+<<echo=FALSE, fig=TRUE, height=6>>=
+
+dotchartplus(journal + subject ~ area + I(area - 1.96 * stderr) +
+             I(area + 1.96 * stderr)| science, data = jg,
+             setslabel = FALSE, axes = 1:2,
+             xlim = c(-.005, 0.35), xaxs = "i",
+             xlab = "Graph Area (Fraction of Total)",
+             adj = c(1, 0), at = (0:3)/10, atsmall = (0:3)/10 + 0.05,
+             pfunc = pointsCI, pch = c(21, 40, 41), full.lines = TRUE)
+@
+\cprotect\caption{\verb|dotchartplus| has a significant number of
+  optional arguments that allow for extensive customisation of the
+  output. The first thing we can change are the point types
+  (\verb|pch|) to something more fitting a confidence interval.
+  The numbers 40 and 41 correspond to `(' and `)', which seem adequate.
+  The other thing we can do is make the line inside the interval stand
+  out more. This can be accomplished by specifying a custom points
+  function (\verb|pfunc|). One such function is defined in Subsection
+  \ref{sec:dotchartplus.demo} called \verb|pointsCI|, which will
+  draw such a line for us.
+  Our call now looks like this:\newline
+  \verb|dotchartplus(journal + subject ~ area + I(area - 1.96 * stderr) +|\newline
+  \verb:             I(area + 1.96 * stderr)| science, data = jg,):
+  \verb|             pfunc = pointsCI, pch = c(21, 40, 41)|
+}
+\label{fig:demo2.CI2}
+\end{figure}
+\clearpage
+\end{document}

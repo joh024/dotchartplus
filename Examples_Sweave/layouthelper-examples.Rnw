@@ -1,0 +1,267 @@
+\documentclass{article}
+\usepackage{Sweave}
+\setkeys{Gin}{width=\textwidth}
+\usepackage{cprotect}
+\begin{document}
+<<echo=FALSE>>=
+llines = function(x, cex = 1)
+  lcm(2.54 * cex * x * par("csi"))
+LHexfunc = function(layobj){
+  LHcall(LHborder(layobj), 1)
+  layout.show(max(getmat(layobj)))
+}
+LHexfunc2 = function(layobj, axisind = NA){
+  LHcall(LHborder(layobj), 1)
+  opar = par(mar = rep(0, 4))
+  on.exit(par(opar))
+  for(i in 1:max(getmat(layobj))){
+    plot.new()
+    box()
+    text(0.5, 0.5, i)
+    if(!is.na(axisind[i]))
+      axis(axisind[i])
+  }
+}
+text.cus =
+  function(txt, cex = 1, pos = c(0.5, 0.5), ...){
+    opar = par(mar = rep(0, 4))
+    on.exit(par(opar))
+    plot.new()
+    plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+    text(pos[1], pos[2], txt, adj = c(0.5, 0.5), cex = cex, ...)
+  }
+
+@
+% Example 001
+Here is what a layout object looks like:
+<<echo=TRUE>>=
+LHdefault(udim = c(2, 1), widths = 1, heights = c(lcm(2), 1))
+@
+While this is what the layout object actually contains,
+in general it's more informative to instead look at it graphically.
+Figure \ref{fig:plotpanel} is a graphical representation of the layout
+object above.
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc(
+         LHdefault(udim = c(2, 1), widths = 1, heights = c(lcm(2), 1))
+         )
+@
+\cprotect\caption{The layout formed by the following call:\newline
+  \verb|LHdefault(udim = c(2, 1), widths = 1, heights = c(lcm(2), 1))|
+}
+\label{fig:plotpanel}
+\end{figure}
+\clearpage
+% Example 002
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc(
+         LHdefault(udim = c(2, 2), widths = 1, heights = 1)
+         )
+@
+\caption{The layout formed by the following call:
+  \texttt{
+    LHdefault(udim = c(2, 2), widths = 1, heights = 1)
+  }
+}
+\label{fig:2by2}
+\end{figure}
+%
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(LHdefault(udim = c(2, 2), widths = 1, heights = 1))
+for(i in 1:4)
+  barplot(VADeaths[,i], main = colnames(VADeaths)[i])
+@
+\caption{Using the layout shown in Figure \ref{fig:2by2} with default
+\texttt{mar}, the layout becomes a substitute for the call \texttt{
+par(mfcol = c(2, 2))}. The barplots are of the data \texttt{VADeaths}
+which is one of the included datasets for R.}
+\label{fig:2by2VADeaths}
+\end{figure}
+%
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc(
+         rbind(LHdefault(fino = 5, widths = NA, heights = llines(2)),
+         LHdefault(udim = c(2, 2), widths = 1, heights = 1))
+         )
+@
+\caption{Just the four barplots on their own as in Figure
+  \ref{fig:2by2VADeaths} is not very informative.
+  Adding a main title for the four plots would be useful, and we can
+  do exactly that by attaching a panel at the top using the bind
+  methods discussed later on in the document.}
+\label{fig:2by2plus}
+\end{figure}
+%
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(
+       rbind(LHdefault(fino = 5, widths = NA, heights = llines(2.1)),
+         LHdefault(udim = c(2, 2), widths = 1, heights = 1))
+       )
+for(i in 1:4)
+  barplot(VADeaths[,i], main = colnames(VADeaths)[i])
+text.cus("Death Rates in Virginia - 1940", 2)
+@
+\caption{Figure \ref{fig:2by2VADeaths} replotted using the new layout
+  shown in Figure \ref{fig:2by2plus}, with an added main title.
+  This kind of plot cannot be replicated using \texttt{par} alone,
+  and is one of the many advantages of \texttt{layout}.
+  That said, this is still not a very good graph. The y axis are
+  different making direct comparisons difficult, and there is a lot of
+  wasted white space by using the default \texttt{mar} settings.}
+\end{figure}
+\clearpage
+% Example 003
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc(
+         LHdefault(udim = c(2, 2), widths = c(1, 2), heights = 1)
+         )
+@
+\caption{The layout formed by the following call:
+  \texttt{
+    LHdefault(udim = c(2, 2), widths = c(1, 2), heights = 1)
+  }}
+\end{figure}
+\clearpage
+% Example 004
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc(
+         LHdefault(udim = c(2, 2), widths = 1, heights = 1,
+                   pad = 1)
+         )
+@
+\caption{The layout formed by the following call:
+  \texttt{
+    LHdefault(udim = c(2, 2), widths = 1, heights = 1, pad = 1)
+  }.
+  The argument supplied to \texttt{pad} will be replicated to length 2,
+  hence simply supplying 1 will specify 1 padding row and column.
+}
+\label{fig:padex1}
+\end{figure}
+\clearpage
+% Example 005
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc(
+         LHdefault(udim = c(2, 2), widths = 1, heights = 1,
+                   pad = c(1, 0))
+         )
+@
+\caption{The layout formed by the following call:
+  \texttt{
+    LHdefault(udim = c(2, 2), widths = 1, heights = 1, pad = c(1, 0))
+  }.
+  This time, we are individually specifying the padding rows (1) and
+  columns (0), unlike in Figure \ref{fig:padex1}.
+}
+\label{fig:padex2}
+\end{figure}
+\clearpage
+% Example 006
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc(
+         LHdefault(udim = c(2, 2), widths = 1, heights = 1,
+                   pad = c(1, 1), padmar = lcm(c(0.5, 1)))
+         )
+@
+\caption{The layout formed by the following call:
+  \texttt{
+    LHdefault(udim = c(2, 2), widths = 1, heights = 1,
+    pad = c(1, 1), padmar = lcm(c(0.5, 1)))
+  }.
+  Another example of having both padding rows and columns, but this time
+  we are individually assigning different padding margins. The margins
+  are specified in absolute units (cm) through the use of the function
+  \texttt{lcm}.
+}
+\end{figure}
+\clearpage
+% Example 007
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc2(
+  rbind(
+    cbind(
+          LHdefault(fino = 0, widths = llines(2.6)),
+          LHdefault(udim = c(1, 2), widths = c(2, 1), heights = 1)),
+        LHlabels(c(0, 3, 0), c(1, 2, 0),
+                 colvec = FALSE,
+                 widhei = 0.1)),
+          2
+          )
+@
+\caption{Our `main' layout has unequal widths, and also has an axis
+  on the left. This makes centering a xlab problematic, but
+  \texttt{LHlabels} provides a way to do this. The call made is
+  \texttt{
+    LHlabels(c(0, 3, 0), c(1, 2, 0), colvec = FALSE,
+    widhei = 0.1)
+  }
+  Thus we have one 0 to match the left axis, two 3's to match the
+  two plotting panels, and zero 0's to the right, as we have no right
+  axis in this case. We also specify a suitable \texttt{widhei} which
+  provides the height, while the widths will automatically match the
+  `main' layout once we bind these together using the methods discussed
+  later on in the document.
+}
+\label{fig:labelbind}
+\end{figure}
+\clearpage
+% Example 008
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHexfunc(rep(LHdefault(udim = c(2, 1), widths = 1,
+                       heights = c(lcm(2), 1)),
+             2, 2, TRUE, c(1, 1))
+         )
+@
+\caption{This gives an example of the layout featured in Figure
+  \ref{fig:plotpanel} replicated with parameters
+  \texttt{rowtimes = 2, coltimes = 2, byrow = TRUE, pad = c(1, 1)}
+  Notice that as the top panel has a fixed height of 2 cm, with the
+  replication, the lower panel has a comparatively smaller height.}
+\end{figure}
+\clearpage
+% Example 009
+\begin{figure}[htb]
+<<echo=FALSE, fig=TRUE>>=
+LHcall(LHborder(LHdefault(udim = c(2, 2), widths = 1, heights = 1),
+                border = 10^-8, numbered = TRUE))
+opar = par(mar = rep(0, 4))
+##plot.new()
+##plot.window(xlim = 0:1, ylim = 0:1)
+##barplot(apply(VADeaths, 1, sum), col = "#F0F0F0", border = "#D0D0D0",
+##        axes = FALSE, col.axis = "#D0D0D0")
+##rect(0, 0, 1, 1, col = "#FFBBBB", border = NA)
+##rect(0.2, 0.2, 0.8, 0.8, col = "#BBFFBB", border = NA)
+##rect(0.4, 0.4, 0.6, 0.6, col = "#BBBBFF", border = NA)
+colvec = c("lightblue", "mistyrose", "lightcyan", "lavender",
+  "cornsilk")
+pie(apply(VADeaths, 1, sum), labels = NA, col = colvec)
+par(opar)
+for(i in 1:4)
+  barplot(VADeaths[,i], main = colnames(VADeaths)[i], col = colvec)
+@
+\caption{Figure \ref{fig:2by2VADeaths} redrawn with a numbered border.
+Using the numbered border, we can draw over the entire plot region
+(in this case, we've drawn a piechart of the age groups summed over
+the population groups), then go through each individual panel and still
+do the barplots as before.
+Note that piecharts are almost always a bad idea (refer to R help for
+\texttt{pie}, under Note), and drawing a graph behind several other 
+graphs is also usually a bad idea.
+This is done purely for demonstration purposes.
+Usually, a numbered border is best used to do something simple, like
+drawing a border around the entire plotting region.}
+\end{figure}
+\clearpage
+
+\end{document}
