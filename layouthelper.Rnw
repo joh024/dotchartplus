@@ -1,0 +1,870 @@
+\documentclass[a4paper]{article}
+\usepackage{noweb}
+\noweboptions{english}
+\usepackage{Sweave}
+\setkeys{Gin}{width=\textwidth}
+\usepackage{cprotect}
+\usepackage{amsmath}
+\begin{document}
+%-----------------------------------------------------------------------
+\title{\textbf{A Literate Program for \\ The Layout Helper}}
+\author{\textit{Jimmy Oh}\\
+  [12pt] Department of Statistics\\ University of Auckland}
+\date{}
+\maketitle
+\codemargin=24pt
+\subsection*{On Literate Programs}
+\label{sec:literate.program}
+This software is presented as a \emph{literate program} written in the
+\emph{noweb} format.
+It serves as both documentation and as a container for the code.
+A single \verb|noweb| file can be used to both produce the
+\emph{literate document} \verb|pdf| file and to extract executable code.
+The document is separated into \emph{documentation chunks} and named
+\emph{code chunks}.
+Each \emph{code chunk} can contain code or references to other
+\emph{code chunks} which act as placeholders for the contents of the
+respective \emph{code chunks}.
+As the name serves as a short description of the code, each
+\emph{code chunk} can give an overview of what it does via the names it
+contains, leaving the reader free to delve deeper into the respective
+\emph{code chunks} for the code if desired.
+
+\section{Introduction}
+\label{sec:introduction}
+The Layout Helper library is designed to aid in the creation and
+manipulation of \emph{layout objects}.
+The layout object is a \emph{S4 Object Class} that contains the three
+parameters required for a call to \verb|layout|, the R function.
+That is, a \verb|matrix| and two \verb|character| vectors defining the
+\verb|widths| and \verb|heights|.
+Refer to \verb|help(layout)| for information regarding the function.
+
+The library's basic capabilities can be used as a substitute for
+\verb|mfrow| and \verb|mfcol| calls to \verb|par|, but with the added
+flexibility of assigning specified \verb|widths| and \verb|heights|.
+The library's other functions allows for construction of complex but
+flexible layouts in a modular fashion (see layout construction in
+\verb|dotchartplus|).
+
+\pagebreak
+\tableofcontents
+
+\section{Code Layout}
+\label{sec:code-layout}
+The code is collected in a file called \verb|layouthelper.R|, which is
+structured as follows.
+<<layouthelper.R>>=
+<<document header>>
+<<define layout Class>>
+<<create standard layout object>>
+<<create labels layout object>>
+<<combine layout objects>>
+<<replicate layout object>>
+<<add a border around a layout object>>
+<<call layout using layout object>>
+@
+
+We define a short document header to encourage readers to read the
+literate description rather than studying the R code directly.
+<<document header>>=
+## The code in this .R file is machine generated.
+## To understand the program, read the literate description
+##  (pdf file) rather than studying just the R code.
+## No separate Manual exists.
+@ 
+
+\subsection{The layout Class}
+\label{sec:layout-class}
+This section describes the layout S4 object class and its associated
+constructor and accessor functions.
+The two vectors, \verb|widths| and \verb|heights|, are defined as
+\verb|character| and not \verb|numeric| to allow for the use of absolute
+scale (\verb|lcm|) which is stored as \verb|character|.
+<<define layout Class>>=
+setClass("layout",
+         representation(matrix = "matrix",
+                        widths = "character",
+                        heights = "character"))
+<<constructor function>>
+<<accessor functions>>
+@
+
+% Example 001
+Here is what a layout object looks like:
+\begin{Schunk}
+\begin{Sinput}
+> LHdefault(udim = c(2, 1), widths = 1, heights = c(lcm(2), 1))
+\end{Sinput}
+\begin{Soutput}
+An object of class "layout"
+Slot "matrix":
+     [,1]
+[1,]    1
+[2,]    2
+
+Slot "widths":
+[1] "1"
+
+Slot "heights":
+[1] "2 cm" "1"   
+\end{Soutput}
+\end{Schunk}
+While this is what the layout object contains, it is more informative
+to look at layout objects graphically.
+Figure \ref{fig:plotpanel} is a graphical representation of the layout
+object above.
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-003}
+\cprotect\caption{The layout formed by the following call:\newline
+  \verb|LHdefault(udim = c(2, 1), widths = 1, heights = c(lcm(2), 1))|}
+\label{fig:plotpanel}
+\end{figure}
+\clearpage
+
+\subsubsection{Constructor and Accessor Functions}
+\label{sec:constructor-accessor}
+These functions define how layout objects are created and how their
+component parts accessed. Using accessor functions to always grab
+components allows for changes in object structure to easily be
+reflected in all code that uses the objects by changing just the
+accessors.
+<<constructor function>>=
+newlayout =
+  function(mat, widths = NA, heights = NA){
+    if(!is.matrix(mat))
+      stop("mat must be a matrix")
+    widths = rep(widths, length = dim(mat)[2])
+    heights = rep(heights, length = dim(mat)[1])
+    new("layout",
+        matrix = mat,
+        widths = as.character(widths),
+        heights = as.character(heights))
+  }
+@ %def newlayout
+
+The provided \verb|widths| and \verb|heights| are always scaled to match
+the dimensions of the provided \verb|mat|, and have a default value of
+\verb|NA| (which causes it to be ignored when combined with other layout
+objects. See Subsection \ref{sec:bind.layout}).
+
+The \verb|getfino| function is used to compute the \verb|fino| for the
+next layout object, where this new layout needs to be attached to the
+existing layout.
+<<accessor functions>>=
+getmat = function(obj) obj@matrix
+getwid = function(obj) obj@widths
+gethei = function(obj) obj@heights
+getfino = function(obj) max(getmat(obj)) + 1
+@ %def getmat getwid gethei getfino
+
+\subsection{Create Standard layout Object}
+\label{sec:LHdefault}
+The function is defined as follows:
+<<create standard layout object>>=
+LHdefault =
+  function(udim = c(1, 1), byrow = FALSE, fino = 1,
+           pad = c(0, 0), padmar = lcm(c(0.5, 0.5)),
+           widths = NA, heights = NA, reverse = FALSE){
+    <<form umat>>
+    <<adjust for padding>>
+    newlayout(laymat, widths, heights)
+  }
+@ %def LHdefault
+
+The basic use of this function is simple, \verb|udim| specifies the
+dimensions of the layout, and \verb|byrow| works as in \verb|matrix|.
+This usage is similar to \verb|mfrow| and \verb|mfcol| calls to
+\verb|par|, with the caveat that \verb|widths| and \verb|heights| must
+be specified.
+The argument \verb|fino| specifies the first number of the layout.
+This is important when multiple layouts are being created and combined,
+but when creating only a single layout the default of 1 should be used.
+% Example 002
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-004}
+\cprotect\caption{The layout formed by the following call:\newline
+  \verb|LHdefault(udim = c(2, 2), widths = 1, heights = 1)|}
+\label{fig:2by2}
+\end{figure}
+%
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-005}
+\cprotect\caption{Using the layout shown in Figure \ref{fig:2by2} with
+  default \verb|mar|, the layout becomes a substitute for the call
+  \verb|par(mfcol = c(2, 2))|.
+  The barplots are of the data \verb|VADeaths| which is one of the
+  included datasets for R.}
+\label{fig:2by2VADeaths}
+\end{figure}
+%
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-006}
+\caption{The four barplots on their own as in Figure
+  \ref{fig:2by2VADeaths} is not very informative.
+  Adding a main title for the four plots would be useful, and we can
+  do exactly that by attaching a panel at the top using the bind
+  methods discussed later on in the document.}
+\label{fig:2by2plus}
+\end{figure}
+%
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-007}
+\cprotect\caption{Figure \ref{fig:2by2VADeaths} replotted using the
+  new layout shown in Figure \ref{fig:2by2plus}, with an added main
+  title.
+  This kind of plot cannot be replicated using \verb|par| alone,
+  and is one of the many advantages of \verb|layout|.
+  That said, this is still not a very good graph. The y axis are
+  different, making direct comparisons difficult, and there is a lot of
+  wasted white space by using the default \verb|mar| settings.}
+\end{figure}
+\clearpage
+
+Specification of \verb|widths| and \verb|heights| are intuitive, being
+the same as with a direct call to \verb|layout|, except that they are
+always replicated to match the dimensions specified.
+% Example 003
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-008}
+\cprotect\caption{The layout formed by the following call:\newline
+  \verb|LHdefault(udim = c(2, 2), widths = c(1, 2), heights = 1)|}
+\end{figure}
+\clearpage
+
+Use of \verb|mar| calls to \verb|par| can be restrictive, and for
+greater control it is best to use rows and columns of 0's within layout.
+For this reason, the arguments \verb|pad| and \verb|padmar| exist.
+% Example 004
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-009}
+\cprotect\caption{The layout formed by the following call:\newline
+  \verb|LHdefault(udim = c(2, 2), widths = 1, heights = 1, pad = 1)|.
+  \newline
+  The argument supplied to \verb|pad| will be replicated to length 2,
+  hence simply supplying 1 will specify 1 padding row and column.
+}
+\label{fig:padex1}
+\end{figure}
+\clearpage
+
+A single value can be specified for \verb|pad|, or a vector of length 2
+to specify the number of padding rows and columns separately.
+% Example 005
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-010}
+\cprotect\caption{The layout formed by the following call:\newline
+  \verb|LHdefault(udim = c(2, 2), widths = 1, heights = 1, pad = c(1, 0))|.\newline
+  This time, we are individually specifying the padding rows (1) and
+  columns (0), unlike in Figure \ref{fig:padex1}.
+}
+\label{fig:padex2}
+\end{figure}
+\clearpage
+
+Notice that with padding, \verb|udim| specifies the
+dimensions of the \verb|umat| (`useful' matrix), which is the matrix
+that actually defines plotting regions. For example, in Figure
+\ref{fig:padex1}, we specify a \verb|udim = c(2, 2)|, but because of
+the padding, the actual matrix ix $3\times3$. Of course, looking at the
+graphical representation of the layout, the advantages of being able
+to specify \verb|udim| and \verb|pad| separately are clear, allowing
+separation of actual graphing elements with presentation elements
+(padding margins).
+% Example 006
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-011}
+\cprotect\caption{The layout formed by the following call:\newline
+  \verb|LHdefault(udim = c(2, 2), widths = 1, heights = 1,|\newline
+  \verb|          pad = c(1, 1), padmar = lcm(c(0.5, 1)))|.\newline
+  Another example of having both padding rows and columns, but this time
+  we are individually assigning different padding margins. The margins
+  are specified in absolute units (cm) through the use of the function
+  \verb|lcm|.
+}
+\end{figure}
+\clearpage
+
+The code to form the padded matrix also utilises the idea of a
+\verb|umat|, first forming this `useful' matrix, then using this to
+fill in the larger padded matrix.
+
+\subsubsection*{Forming the umat}
+\label{sec:form-umat}
+We first form the \verb|umat|, generating the required sequence of
+numbers based on \verb|fino| and \verb|udim|, with the sequence being
+reversed if \verb|reverse = TRUE|.
+In addition, we ensure the supplied \verb|widths| and \verb|heights|
+are of the correct length by recycling.
+The actual matrix is declared as \verb|laymat| as this may be further
+adjusted for padding before being returned.
+<<form umat>>=
+useq = seq(fino, length = prod(udim))
+if(reverse){
+  useq = rev(useq)
+  heights = rev(heights)
+  widths = rev(widths)
+}
+laymat = matrix(useq, udim[1], udim[2], byrow)
+heights = rep(heights, length = udim[1])
+widths = rep(widths, length = udim[2])
+@
+
+\subsubsection*{Adjusting for Padding}
+\label{sec:adjust-padding}
+We then adjust the \verb|umat| for any padding specified.
+The argument \verb|pad| is a vector of length 2, with the first element
+specifying the number of padding rows between each element of the
+\verb|umat|, and the second element the padding columns.
+Generally, only 0 or 1 is used, with \verb|padmar| being used to
+specify the \verb|widths| or \verb|heights| of the padding rows/columns.
+
+The actual adjustment is accomplished by first forming a larger matrix
+(\verb|Lmat|) containing only 0's, then replacing the correct elements
+with the elements from the \verb|umat|.
+Similarly, we also adjust the \verb|widths| and \verb|heights| by first
+forming a larger vector containing only \verb|padmar|, then replacing
+the correct elements with the \verb|umat| \verb|widths| and
+\verb|heights|.
+For computational purposes, the row and col indices (the locations to
+insert the \verb|umat| elements) are calculated first.
+
+Finally, \verb|laymat|, \verb|widths| and \verb|heights| are updated
+to their padded variants.
+<<adjust for padding>>=
+pad = rep(pad, length = 2)
+padmar = rep(padmar, length = 2)
+if(any(pad > 0)){
+  <<compute rowcol indices>>
+  <<form larger matrix>>
+  <<replace correct elements>>
+  laymat = Lmat
+  heights = Lheights
+  widths = Lwidths
+}
+@
+
+The row and col indices computation can be understood in this manner:
+For illustration purposes, let's only look at row positions.
+\begin{enumerate}
+\item Each element of the \verb|umat| has row positions 1, 2, ... ,
+  \verb|udim[1]| (\verb|1:udim[1]|) to begin with.
+\item These must then be adjusted for padding in between each element.
+  Suppose we have padding of 1 row. Then the new row positions are
+  1, 3, 5, ...
+\item We note that these positions can be generated by the following
+  equation: \verb|1:udim[1] + 1 * (1:udim[1] - 1)|.
+\item Now suppose we have padding of 2 rows. Then the new row positions
+  are 1, 4, 7, ...
+\item We note that these positions can be generated by the following
+  equation: \verb|1:udim[1] + 2 * (1:udim[1] - 1)|.
+\item More generally, for any row padding, \verb|pad[1]|, the new row
+  positions can be generated by the following equation:
+  \verb|1:udim[1] + pad[1] * (1:udim[1] - 1)|.
+  An equivalent statement that may be harder to understand, but is
+  marginally more efficient, is:
+  \verb|(1 + pad[1]) * 1:udim[1] - pad[1]|.
+  Which is the form used in the actual code.
+\end{enumerate}
+<<compute rowcol indices>>=
+rowind = (1 + pad[1]) * 1:udim[1] - pad[1]
+colind = (1 + pad[2]) * 1:udim[2] - pad[2]
+@ 
+
+As padding only applies in between elements of the \verb|umat|, the
+largest indices gives us the dimensions of the \verb|Lmat|.
+All that remains is to simply call \verb|matrix| and recycle the
+\verb|padmar| to match the dimensions of the \verb|Lmat|.
+<<form larger matrix>>=
+Lmat = matrix(0, max(rowind), max(colind))
+Lheights = rep(padmar[1], length = dim(Lmat)[1])
+Lwidths = rep(padmar[2], length = dim(Lmat)[2])
+@
+
+Finally, we replace the right elements (which we have already computed)
+with the elements from \verb|umat|, \verb|widths| and \verb|heights|.
+<<replace correct elements>>=
+Lmat[rowind, colind] = laymat
+Lheights[rowind] = heights
+Lwidths[colind] = widths
+@ 
+
+\subsection{Creating Label layout Objects}
+\label{sec:LHlabels}
+When forming more complex layouts, the plotting of axis labels that are
+correctly aligned can become challenging. Several cases can present this
+problem, such as with asymmetric axis (an axis on one side but not the
+other), where the plotting region consists of an even number of panels
+(meaning no `middle' panel exists to use as the centre position), or
+where the plot panels are not equally sized (again causing problems
+with finding the centre).
+
+\verb|LHlabels| is designed for cases like these, when you wish to
+create a suitably sized layout to attach to the main one, such that
+the label region correctly matches to the plotting regions, with
+white-space to match the axis.
+
+The use of the function is thus, the argument \verb|x| specifies the
+numbering, each of length corresponding to \verb|lengths|.
+That is, the following call:
+\begin{verbatim}
+LHlabels(x = c(1, 2), lengths = c(2, 1), colvec = FALSE, widhei = 1)
+\end{verbatim}
+Will produce a layout object containing the row vector \verb|1 1 2|,
+with height 1 and widths \verb|NA|.
+
+In general, \verb|x| will be \verb|c(0, 1, 0)|, where 1 can be
+substituted for the appropriate number for the label panel.
+Then \verb|lengths| can be matched to the size of the axis on either
+side and to the plotting region.
+
+Finally, the arguments \verb|colvec| specifies whether the output
+is a column vector or not (row vector) and \verb|widhei| specifies the
+\verb|widths| or \verb|heights| as appropriate.
+As the intent is for matching to some existing layout, \verb|widhei|
+is passed to whichever is necessary for meshing, while the other
+remains \verb|NA| so that it is ignored.
+
+Thus, if the label is a column vector, the \verb|widths| of this
+column must be specified, while the \verb|heights| of the existing
+layout can be used. Hence \verb|widhei| will be specifying the
+\verb|widths| of this column vector.
+<<create labels layout object>>=
+LHlabels =
+  function(x, lengths = c(0, 1, 0), colvec = TRUE, widhei = NA){
+    if(colvec){
+      ncol = 1
+      widths = widhei
+      heights = NA
+    } else{
+      ncol = sum(lengths)
+      widths = NA
+      heights = widhei
+    }
+    
+    maxlen = max(length(x), length(lengths))
+    x = rep(x, maxlen)
+    lengths = rep(lengths, maxlen)
+    
+    labvec = NA
+    for(i in 1:maxlen)
+      labvec = c(labvec, rep(x[i], lengths[i]))
+    labvec = labvec[-1]
+    
+    newlayout(matrix(labvec, ncol = ncol), widths, heights)
+  }
+@ %def LHlabels
+
+% Example 007
+\begin{figure}[h!]
+\includegraphics{layouthelper-examples-012}
+\cprotect\caption{Our `main' layout has unequal widths, and also has an
+  axis on the left. This makes centering a xlab problematic, but
+  \verb|LHlabels| provides a way to do this. The call made is\newline
+  \verb|LHlabels(c(0, 3, 0), c(1, 2, 0), colvec = FALSE, widhei = 0.1)|\newline
+  Thus we have one 0 to match the left axis, two 3's to match the
+  two plotting panels, and zero 0's to the right, as we have no right
+  axis in this case. We also specify a suitable \verb|widhei| which
+  provides the height, while the widths will automatically match the
+  `main' layout once we bind these together using the methods discussed
+  later on in the document.
+}
+\label{fig:labelbind}
+\end{figure}
+\clearpage
+\subsection{Combining layout Objects}
+\label{sec:bind.layout}
+A single standard layout object generally doesn't give us the complete
+layout matrix. Instead, we must combine several layout objects.
+<<combine layout objects>>=
+<<define a layout cbind>>
+<<define a layout transpose>>
+<<define a layout rbind>>
+@ 
+
+\subsubsection{Binding layouts by columns}
+\label{sec:cbind.layout}
+Often we will desire a combination of layout objects that will have
+the same matrix dimensions. However, occasionally we may wish to combine
+layout objects with different matrix dimensions, usually where
+one layout object is a $1\times1$ matrix, which we wish to simply
+stretch to fit the larger matrix.
+Thus, unlike the matrix method for \verb|cbind|, the layout method
+accepts matrices of different dimensions by scaling smaller matrices.
+The scaling method is a `stretch' method, with `over-stretched' excess
+removed without warning.
+This is perhaps best understood by way of example.
+Consider the following $1\times2$ matrix:
+\begin{equation*}
+  \begin{bmatrix}
+    1 & 2
+  \end{bmatrix}
+\end{equation*}
+Now suppose we wish to scale this to match a $1\times4$ matrix, then
+it will be stretched to the following:
+\begin{equation*}
+  \begin{bmatrix}
+    1 & 1 & 2 & 2
+  \end{bmatrix}
+\end{equation*}
+Now consider if we wished to scale the original $1\times2$ matrix to
+match a $1\times3$ matrix, then it will be stretched to the following:
+\begin{equation*}
+  \begin{bmatrix}
+    1 & 1 & 2
+  \end{bmatrix}
+\end{equation*}
+Here, the excess column containing 2 has been removed.
+This is how all scaling in the \verb|bind| method is handled.
+<<define a layout cbind>>=
+cbind.layout =
+  function(..., reverse = FALSE){
+    <<form list and remove nulls>>
+    <<separate components>>
+    <<scale matrices>>
+    <<combine matrices widths and heights>>
+    newlayout(new.mat, new.wid, new.hei)
+  }
+@
+
+We pass the arguments into a list, removing any \verb|NULL| objects.
+In addition, if \verb|reverse = TRUE|, then reverse the order of the
+supplied layout objects.
+<<form list and remove nulls>>=
+parlist = list(...)
+parlist = parlist[!sapply(parlist, is.null)]
+if(reverse) rev(parlist)
+@ 
+
+We separate each component as they require separate handling.
+Each component will be stored in a list.
+<<separate components>>=
+parmat = lapply(parlist, function(x) getmat(x))
+parwid = lapply(parlist, function(x) getwid(x))
+parhei = lapply(parlist, function(x) gethei(x))
+@ 
+
+For scaling the matrices to fit, we first find the largest row
+dimension, then scale all matrices to have this number of rows.
+The scaling can be understood in this manner:
+\begin{enumerate}
+\item We note that R stores matrices column-wise as a vector.
+\item If the matrix is taken to be a vector and replicated by a call to
+  \verb|rep| supplying an argument for \verb|each|, each column of the
+  matrix can be `stretched' downward. We then need to know how much to
+  stretch by.
+\item Suppose we wish to stretch a matrix \verb|x|.
+  \verb|rowmax/dim(x)[1]| gives us the exact proportion of the largest
+  row (\verb|rowmax|) to the rows of the current matrix (\verb|x|).
+\item \verb|ceiling(rowmax/dim(x)[1]))| then gives us the integer
+  multiple (rounded-up) to stretch by. Note this will `over-stretch' the
+  matrix beyond what we want (\verb|rowmax|).
+\item Specifying \verb|ncol = dim(x)[2]| ensures the resulting matrix
+  has the correct column dimension.
+\item Taking the subset \verb|[1:rowmax, ,drop = FALSE]| ensures the
+  resulting matrix has the correct row dimension (by removing the
+  excess created by the `over-stretch').
+\end{enumerate}
+Let us go over the above with a concrete example. Let us consider the
+following $2\times2$ matrix:
+\begin{equation*}
+  \begin{bmatrix}
+    1 & 3 \\
+    2 & 4
+  \end{bmatrix}
+\end{equation*}
+In R, this matrix is stored as a vector of length 4 (1 2 3 4).
+If we were to make a call to \verb|rep| supplying \verb|each = 2|, the
+resulting vector would be: 1 1 2 2 3 3 4 4.
+If we then converted this back to a matrix, supplying \verb|ncol| as the
+original number of columns (\verb|dim(x)[2]| = 2), we get the following
+`stretched' matrix:
+\begin{equation*}
+  \begin{bmatrix}
+    1 & 3 \\
+    1 & 3 \\
+    2 & 4 \\
+    2 & 4
+  \end{bmatrix}
+\end{equation*}
+We have, in effect, `stretched' the matrix downward.
+If we wished a fewer number of rows, we can simply take a subset.
+Specifying the argument \verb|drop = FALSE| ensures that the subset
+we take remains a matrix.
+<<scale matrices>>=
+rowmax = max(sapply(parmat, nrow))
+matscaled = lapply(parmat, function(x)
+      matrix(rep(x, each = ceiling(rowmax/dim(x)[1])),
+             ncol = dim(x)[2])[1:rowmax, ,drop = FALSE]     
+      )
+@ 
+
+As we're binding by columns, we simply merge the individual
+\verb|widths| vectors to form the new \verb|widths|. 
+The handling of \verb|heights| is somewhat more complicated.
+Firstly, we ignore any \verb|heights| vector which contains NA.
+Of the remaining vectors, we grab the first longest vector.
+This way of handling is useful when you wish to \verb|cbind| a new
+layout object to an existing one, and you wish for the new layout
+object to share the same \verb|heights| as the existing. Rather than
+having to grab the \verb|heights| from the existing, one can simply
+form the new layout object with \verb|heights = NA|. Upon combination,
+this NA \verb|heights| vector will be ignored, and the new combined
+layout object will carry the correct \verb|heights| vector.
+<<combine matrices widths and heights>>=
+new.mat = do.call(cbind, matscaled)
+new.wid = unlist(parwid)
+notna.hei = parhei[sapply(parhei, function(x) all(!is.na(x)))]
+lens.hei = sapply(notna.hei, length)
+firstlongest.hei = which(lens.hei == max(lens.hei))[1]
+new.hei = notna.hei[[firstlongest.hei]]
+@ 
+
+\subsubsection{Transpose of a layout Object}
+\label{sec:t.layout}
+The matrix scaling involved in \verb|cbind.layout| causes some problems
+in writing a similar \verb|rbind.layout|. For the early iterations of
+the Layout Helper, there were two separate methods, but often they
+behaved in different ways with respect to the scaling. It was deemed
+wiser to simply transpose the layout object, apply \verb|cbind.layout|,
+then transpose back, rather than having a separate \verb|rbind.layout|
+method. Thus, we must define what a transpose of a layout object is. A
+transpose of a layout object is simply a transpose of the matrix, and
+an exchange of the \verb|widths| and \verb|heights|.
+<<define a layout transpose>>=
+setMethod("t", signature(x = "layout"),
+  function(x) newlayout(t(getmat(x)), gethei(x), getwid(x)))
+@ 
+
+\subsubsection{Binding layouts by rows}
+\label{sec:rbind.layout}
+Now that we have defined the transpose of a layout object, it is easy
+to define a method for binding by rows. We take the provided arguments,
+place into a list, transpose every element, call cbind, then back
+transpose the combined layout object.
+
+As with \verb|cbind.layout|, we remove any \verb|NULL| objects, as
+a transpose of a \verb|NULL| is not defined.
+<<define a layout rbind>>=
+rbind.layout =
+  function(..., reverse = TRUE){
+    parlist = list(...)
+    parlist = parlist[!sapply(parlist, is.null)]
+    tparlist = lapply(parlist, t)
+    combined = do.call(cbind, tparlist)
+    t(combined)
+  }
+@
+
+\subsection{Replicating a layout Object}
+\label{sec:rep.layout}
+Rather than combining distinct layout objects, we may sometimes be
+interested in replicating the same layout object to create multiple
+panels.
+Replicating layout objects works slightly differently from the default
+\verb|rep| for the crucial reason that the numbering must be adjusted
+for the replicated layout object to be useful.
+This is most easily done by utilising the afore defined bind functions,
+rather than utilising \verb|rep|.
+<<replicate layout object>>=
+<<shift layout numbering>>
+setMethod("rep", signature(x = "layout"),
+          local({
+            <<rep function>>
+            <<rep ordering function>>
+            }))
+@
+
+We define two support functions, one within a local block whose value is
+the ordering function, and another outside the local block, as it has
+potential use beyond just the rep function.
+The use of the local block `hides' the support function, preventing it
+from being called separately.
+
+The first support function is to shift the numbering.
+As mentioned, for a replicated layout object to be useful, the numbering
+must be shifted (thereby defining new plotting regions when
+\verb|layout| is called).
+This is done by simply adjusting all non-zero elements in the matrix
+by adding the previous maximum number (\verb|prevmax|).
+This way of shifting relies on the matrix having every integer number
+from 1 to its maximum value at least once (i.e. being a valid
+\verb|layout| matrix).
+The \verb|prevmax| can either be supplied as an argument, or is
+otherwise calculated by taking the \verb|max| of the supplied matrix.
+<<shift layout numbering>>=
+LHshift = function(x, prevmax = NULL){
+  mat = getmat(x)
+  if(is.null(prevmax)) prevmax = max(mat)
+  mat[mat > 0] = mat[mat > 0] + prevmax
+  newlayout(mat, getwid(x), gethei(x))
+}
+@ %def LHshift
+
+The support function in the local block does the actual replication.
+The `replication' is conducted by creating a replicate layout object
+with shifted numbers, then binding this to the existing layout object.
+This is then looped to however many replications are desired.
+The actual \verb|repfunc| can be difficult to use, so we also create
+\verb|repright| and \verb|repdown| for a more inuitive way to call.
+<<rep function>>=
+repfunc = function(x, times, what = "cbind",
+  pad = 0, padmar = c(NA, NA)){
+  padobj = if(pad > 0)
+    rep(list(LHdefault(fino = 0, widths = padmar[2],
+                       heights = padmar[1])), length = pad)
+    else NULL
+  newx = x
+  if(times > 1)
+    for(i in 2:times)
+      newx = do.call(what, c(list(newx), padobj,
+        list(LHshift(x, max(getmat(newx))))))
+  newx
+}
+repright = function(x, times, pad = 0, padmar = lcm(0.5))
+  repfunc(x, times, "cbind", pad = pad, padmar = c(NA, padmar))
+repdown = function(x, times, pad = 0, padmar = lcm(0.5))
+  repfunc(x, times, "rbind", pad = pad, padmar = c(padmar, NA))
+@ %def repfunc repright repdown
+
+Finally, the ordering function, which can be considered the `main'
+function. The argument \verb|x| is the layout object to be replicated,
+\verb|byrow| specifies whether the replication should occur by rows
+first (i.e. to the right) or by columns first (i.e. downwards).
+The arguments \verb|coltimes| and \verb|rowtimes| works like
+\verb|times| in the default \verb|rep| function.
+<<rep ordering function>>=
+function(x, rowtimes = 1, coltimes = 1, byrow = FALSE,
+         pad = c(0, 0), padmar = lcm(c(0.5, 0.5))){
+  if(byrow){
+    newx = repright(x, coltimes, pad[2], padmar[2])
+    repdown(newx, rowtimes, pad[1], padmar[1])
+  } else{
+    newx = repdown(x, rowtimes, pad[1], padmar[1])
+    repright(newx, coltimes, pad[2], padmar[2])
+  }
+}
+@
+
+\subsection{Calling layout}
+\label{sec:LHcall}
+This is a trivial function that calls \verb|layout| with the correct
+components of the provided layout object.
+If provided with a custom argument \verb|cex|, the function will also
+set the \verb|par| value for cex to the given value (as \verb|layout|
+will automatically adjust \verb|cex| based on the size of the matrix).
+<<call layout using layout object>>=
+LHcall =
+  function(obj, cex = NULL){
+   layout(getmat(obj), getwid(obj), gethei(obj))
+   if(!is.null(cex)) par(cex = cex)
+  }
+@ %def LHcall
+
+% Example 008
+\begin{figure}[htb]
+\includegraphics{layouthelper-examples-013}
+\cprotect\caption{This gives an example of the layout featured in
+  Figure \ref{fig:plotpanel} replicated with parameters:\newline
+  \verb|rowtimes = 2, coltimes = 2, byrow = TRUE, pad = c(1, 1)|\newline
+  Notice that as the top panel has a fixed height of 2 cm, with the
+  replication, the lower panel has a comparatively smaller height.}
+\end{figure}
+\clearpage
+
+\subsection{Adding Borders}
+\label{sec:LHborder}
+This is a trivial function for adding a border (usually of 0's) around
+a layout object.
+We first add top and bottom, then add sides, which includes the corners.
+
+This function doesn't use the bind methods defined above:
+firstly because this was written earlier,
+and secondly because this is more efficient.
+
+The argument \verb|border| is specified in much the same way as
+\verb|oma| in \verb|par|, with the difference that the specified number
+is interpreted as cm, not lines of text. Thus the default of 0.5
+specifies a border on all sides of 0.5 cm. One could supply
+\verb|border = c(1, 0.5, 1, 0.5)| for a 1 cm border on the top and
+bottom, and a 0.5 cm border on the sides.
+
+If \verb|numbered = FALSE|, the border consists of 0's.
+
+If \verb|numbered = TRUE|, the border is numbered, meaning it can be
+used as a plotting region. By bordering some layout object with a
+numbered border, one can treat the entire bordered layout as a single
+panel, as well as treating it as individual panels.
+
+The actual procedure of adding the border is similar under both cases,
+except if the border is numbered, the numbering is taken to be the
+smallest number in the layout object, and the layout object's numbers
+are shifted to account for the numbered border.
+
+As a layout object may not have \verb|widths| or \verb|heights| of value
+0, the function will automatically replace any 0's given with 1
+angstrom, which is $10^{-8}$ cm. This is most useful when adding a
+numbered border, as it is often desirable for the numbered border to
+have (effectively) no separate \verb|widths| or \verb|heights|.
+<<add a border around a layout object>>=
+LHborder =
+  function(obj, border = 0.5, numbered = FALSE){
+    border[border == 0] = 10^-8
+    border = rep(border, length = 4)
+    if(numbered) obj = LHshift(obj, 1)
+    mat = getmat(obj)
+    wid = getwid(obj)
+    hei = gethei(obj)
+    
+    dims = dim(mat)
+    bordnum = if(numbered) min(mat[mat > 0]) - 1 else 0
+    
+    bordtop = rep(bordnum, dims[2])
+    bordsides = rep(bordnum, dims[1] + 2)
+    
+    new.mat = rbind(bordtop, mat, bordtop, deparse.level = 0)
+    new.mat = cbind(bordsides, new.mat, bordsides, deparse.level = 0)
+
+    new.wid = c(lcm(border[2]), wid, lcm(border[4]))
+    new.hei = c(lcm(border[3]), hei, lcm(border[1]))
+  
+    newlayout(new.mat, new.wid, new.hei)
+  }
+@ %def LHborder
+Note that the calls to \verb|rep|, \verb|rbind| and \verb|cbind| are
+calls to the standard methods that comes with R, not the ones defined
+for layout objects.
+We specify \verb|deparse.level = 0| as otherwise the combined matrix
+will gain col and row names.
+
+% Example 009
+\begin{figure}[h!]
+\includegraphics{layouthelper-examples-014}
+\cprotect\caption{Figure \ref{fig:2by2VADeaths} redrawn with a numbered
+  border.
+  Using the numbered border, we can draw over the entire plot region
+  (in this case, we've drawn a piechart of the age groups summed over
+  the population groups), then go through each individual panel and
+  still do the barplots as before.
+  Note that piecharts are almost always a bad idea (refer to R help for
+  \verb|pie|, under Note), and drawing a graph behind several other 
+  graphs is also usually a bad idea.
+  This is done purely for demonstration purposes.
+  Usually, a numbered border is best used to do something simple, like
+  drawing a border around the entire plotting region.}
+\end{figure}
+\clearpage
+
+\section{Chunk Index}
+\label{sec:chunk-index}
+\nowebchunks
+
+\section{Identifier Index}
+\label{sec:identifier-index}
+Numbers indicate the chunks in which the function appears.
+Underline indicates the chunk where the function is defined.
+\medskip
+
+\nowebindex
+
+\end{document}

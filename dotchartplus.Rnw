@@ -1,0 +1,1708 @@
+\documentclass[a4paper]{article}
+\usepackage{noweb}
+\noweboptions{english}
+\usepackage{Sweave}
+\setkeys{Gin}{width=\textwidth}
+\usepackage{cprotect}
+\usepackage{amsmath}
+\newcommand{\advancedusers}{\emph{For advances users only}. }
+\newcommand{\juxt}[2]{\texttt{#1}\normalfont\emph{#2}}
+\newcommand{\blankpage}{\begin{quote}\end{quote}}
+\begin{document}
+\renewcommand\abstractname{\large Abstract}
+%-----------------------------------------------------------------------
+\begin{titlepage}
+  \title{\textbf{A Literate Program for \\ Drawing Dotcharts}}
+  \author{\textit{Jimmy Oh}\\
+    [12pt] Department of Statistics \\ University of Auckland}
+\date{}
+\maketitle
+\codemargin=24pt
+\begin{abstract}\normalsize
+  Dotcharts are used to plot one quantitative variable with labels
+  (Cleveland, 1985) and has many advantages over other ways of
+  displaying labeled data.
+  We present a method for drawing dotcharts in R, one capable of
+  reproducing most dotcharts given in Cleveland, W. S. (1985)
+  \textbf{The Elements of Graphing Data.}
+\end{abstract}
+\begin{figure}[htb]
+\centering
+\includegraphics[width=0.8\textwidth]{dotchartplus-examples-002}
+\caption{A simple dotchart. The data plots per capita taxes in 1980
+  of select states in the United States.
+  The position of the points indicate the data values, while the dotted
+  lines help connect the points to their labels.
+}
+\label{fig:simple.dot}
+\end{figure}
+  \thispagestyle{empty}
+  \newpage
+  \blankpage
+  \thispagestyle{empty}
+\end{titlepage}
+\pagestyle{plain}
+\pagenumbering{roman} % Roman numerals
+\setcounter{page}{1}
+\tableofcontents
+\newpage
+\blankpage
+\newpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\subsection*{On Literate Programs}
+\label{sec:literate.program}
+This software is presented as a \emph{literate program} written in the
+\emph{noweb} format.
+It serves as both documentation and as a container for the code.
+A single \verb|noweb| file can be used to both produce the
+\emph{literate document} \verb|pdf| file and to extract executable code.
+The document is separated into \emph{documentation chunks} and named
+\emph{code chunks}.
+Each \emph{code chunk} can contain code or references to other
+\emph{code chunks} which act as placeholders for the contents of the
+respective \emph{code chunks}.
+As the name serves as a short description of the code, each
+\emph{code chunk} can give an overview of what it does via the names it
+contains, leaving the reader free to delve deeper into the respective
+\emph{code chunks} for the code if desired.
+
+\section{Introduction}
+\label{sec:Introduction}
+Dotchart Plus is a function designed to plot dotcharts in R.
+
+Dotcharts, also known as `Cleveland dotplots' are used to plot one
+quantitative variable with labels (Cleveland, 1985).
+They were ``invented in response to the standard ways of displaying
+labeled data - bar charts, divided bar charts, and pie charts - which
+usually convey quantitative information less well to the viewer than
+dot charts'' (Cleveland, 1985, p144).
+
+A basic \verb|dotchart| function already exists in the default
+installation of R. This function ``was written as a simple placeholder,
+to be replaced by a better version when the time to create such an
+improved version became available. Unfortunately the rewrite never
+occured.''\footnote{Ross Ihaka, author of the built-in R
+  \texttt{dotchart} function}
+
+Discussion on why you should use a dotchart, how \verb|dotchartplus|
+differs from \verb|dotchart| and \verb|dotplot| (from the `lattice' R
+package), and some examples on how to use \verb|dotchartplus| are
+covered in the \emph{Demonstration Document}
+(\verb|dotchartplus-demos.pdf|).
+
+This document covers the code for the default method for
+\verb|dotchartplus|. Major functionality includes the ability to
+juxtapose \emph{groups} of data, to superpose \emph{sets} of data,
+and to highlight specific points easily.
+
+\subsection{Code Overview}
+\label{sec:code.overview}
+The Dotchart Plus function is structured as follows:
+<<dotchartplus.R>>=
+<<document header>>
+<<define default Generic>>
+setMethod("dotchartplus", signature(object = "list"),
+          local({
+            <<Auxiliary Functions>>
+            <<Main Function>>
+            })
+          )
+<<Parslist Function>>
+@
+
+We first define a default Generic function for \verb|dotchartplus|
+that is essentially an error message.
+Any unrecognised object types will result in this default function
+being called.
+
+We additionally define a shorthand function \verb|dcp|, for ease of use.
+<<define default Generic>>=
+setGeneric("dotchartplus", useAsDefault =
+  function(object, ...){
+    cat('"', class(object),
+        '" is not a recognised object type.',
+        '\nThe following are the currently defined methods:',
+        '\n(Note that object="ANY" corresponds to this ',
+        'error message function)\n', sep = "")
+    showMethods("dotchartplus", inherited = FALSE)
+  })
+dcp = function(...) dotchartplus(...)
+@ 
+
+With the default error message defined, we can now define the true
+\verb|dotchartplus| function.
+
+This function takes \verb|list| objects, and all other object methods
+essentially convert those formats into the require \verb|list| object.
+% More or less Ross's words.
+The Auxiliary and Main functions are defined within
+a \verb|local| block whose value is the Main function.
+This provides a way of hiding the utility functions in a
+scope which is only visible within the body of the function
+\verb|dotchartplus|.
+\begin{description}
+\item[Auxiliary Functions] provides supporting functions. This is
+  further subsectioned into \emph{Primary} and \emph{Secondary}.
+\item[Main Function] handles certain back end work to ensure all the
+  required variables are in the right format, then calls \emph{Primary}
+  Auxiliary Functions to do the actual plotting.
+\item[Parslist Function] contains the \verb|parslist| specification
+  function, which defines the default parameters for many of the
+  optional arguments for \verb|dotchartplus|.
+\end{description}
+
+\section{The Main Function}
+\label{sec:dcp.default}
+The \emph{Main Function} works more or less as it appears.
+It first carries out certain back end work to ensure all the required
+variables are in the right format then calls first the
+\emph{Layout Auxiliary} then the \emph{Plot Auxiliary}.
+
+For advanced users, the function also returns several objects
+invisibly.
+<<Main Function>>=
+function(object, textlist = NULL, xlab = NULL, col = NULL,
+         at = NULL, atsmall = NULL, atlabels = NULL,
+         parslist = DefaultParslist, ...){
+  datlist = object
+  rm(object)
+  <<back end work>>
+  <<call layout aux>>
+  <<call plot aux>>
+  <<return various as invisible>>
+  }
+@
+
+\subsection*{Main Arguments}
+\begin{description}
+\item[\texttt{datlist}] - the data to plot in list form.
+  The only strictly non-optional argument.
+  This should be a list containing matrices (vectors are taken
+  to be a matrix with one column).
+  Each element of the list specifies a \emph{group} of data.
+  Each column of each matrix specifies \emph{sets} of data.
+  Each row of each matrix specifies data points corresponding to the
+  same text label.
+\item[\texttt{textlist}] - the text label for each point of data.
+  Same form as \verb|datlist|, but with each column of each
+  matrix specifying a new column of text to plot.
+\end{description}
+% Parent args help
+\verb|> datlist|\\
+\verb|[|\verb|[1]|\verb|]|
+\begin{verbatim}
+   [,1] [,2]
+A1    1    4
+A2    2    5
+A3    3    6
+> dotchartplus(datlist)
+\end{verbatim}
+\begin{figure}[htb]
+\centering
+\includegraphics[width=.8\textwidth]{dotchartplus-examples-004}
+\cprotect\caption{A simple example to demonstrate what \verb|datlist|
+  looks like. Our \verb|datlist| contains 1 group and 2 sets of data.
+  Each set has 3 data points.
+}
+\label{fig:argshelp2}
+\end{figure}
+\clearpage
+
+\begin{verbatim}
+> datlist
+$`Group A`
+     black white
+[1,]     1     4
+[2,]     2     5
+[3,]     3     6
+\end{verbatim}
+\verb|> textlist|\\
+\verb|[|\verb|[1]|\verb|]|
+\begin{verbatim}
+     [,1]      [,2]
+[1,] "Some"    "A1"
+[2,] "Made-up" "A2"
+[3,] "Data"    "A3"
+> dotchartplus(datlist, textlist, adj = c(1, 0))
+\end{verbatim}
+\begin{figure}[htb]
+\includegraphics{dotchartplus-examples-006}
+\cprotect\caption{Another example to demonstrate what \verb|datlist|
+  looks like. Here we use a separate \verb|textlist| to specify more
+  than 1 column of text labels.
+}
+\label{fig:argshelp2}
+\end{figure}
+\clearpage
+
+\subsection*{Optional Arguments}
+\begin{description}
+\item[\texttt{at}] - An axis specification argument, similar in working
+  to \verb|axis|. Specifying \verb|at| will result in this
+  being passed to both \verb|at1| and \verb|at3| in
+  \verb|parslist| (while specifying \verb|at1| will change the
+  \verb|at| attribute for axis 1 only).
+  The same thing occurs for \verb|atsmall| and
+  \verb|atlabels|.
+  This makes it easier to specify both axes at the same time,
+  while also retaining the capability for individual
+  specification.
+\item[\texttt{col}] - Specifying \verb|col| will result in 
+  this colour being passed to \verb|pbg| (point background colour),
+  which is the most likely candidate to change if the user chooses
+  to specify some custom colour.
+\item[\texttt{xlab}] - \verb|xlab| is passed on to
+  \verb|lab1| or \verb|lab3| based on whether that axis
+  has been specified in \verb|axes|.
+  This is different from manually specifying \verb|lab1| or
+  \verb|lab3|, which will result in that label always being
+  plotted, even if the corresponding axis is not specified
+  in \verb|axes|.
+\end{description}
+Further optional arguments can be specified either by using a
+different \verb|parslist| or by passing it through via
+`\verb|...|'.
+
+\subsection{The Parslist Function}
+\label{sec:dcp.parslist}
+This subsection details the \verb|parslist| function, which defines the
+default parameters for many of the optional arguments for
+\verb|dotchartplus|.
+It is also the natural place to discuss these optional arguments.
+
+In most cases, users will want to use the default values,
+but the option is given for those who want it.
+Optional arguments can be specified either by using a different
+\verb|parslist| or by passing these through via `\verb|...|'.
+A different \verb|parslist| can be constructed either by using this
+function (specifying which arguments you wish to change),
+or by using the \verb|parslist| returned from a call to
+\verb|dotchartplus| (which will incorporate all the changes specified,
+including those made via `\verb|...|').
+In general, it is easiest to simply pass any optional arguments you
+require through `\verb|...|'.
+
+It is possible to replace the provided \verb|DefaultParslist| with one
+you create, which will serve to change the default values of all
+subsequent dotcharts created via \verb|dotchartplus|.
+<<Parslist Function>>=
+dcpParslist =
+  function(cex = c(0.6, 1.1), highlight = NULL,
+           
+           widths = NULL, heights = NULL, labwidths = NULL,
+           fpad = NULL, pad = c(0, 1), padmar = NULL,
+           border = 0.5, newlayout = TRUE,
+           
+           axes = c(1, 2),
+           lab1 = NULL, lab2 = NULL, lab3 = NULL, lab4 = NULL,
+           labcexmult = 1, percentile = FALSE,
+           xlim = NULL, xaxs = "r",
+           at1 = NULL, atsmall1 = NULL, atlabels1 = NULL,
+           at3 = NULL, atsmall3 = NULL, atlabels3 = NULL,
+           
+           main = NULL, maincexmult = 1.5,
+           grouplabel = NULL, grouplabcexmult = 1,
+           grouplabadj = 0.5, grouplabbg = "#F0F0F0",
+           grouplabcol = 1, grouplabfont = 1,
+           setslabel = NULL, setslabcexmult = 1,
+           
+           pfunc = points, pbg = c("white", "black"),
+           pch = c(21, 21, 24, 24), pcol = 1,
+           adj = 0.5, fcol = 1, font = 1:4,
+           full.lines = NULL, lfunc = segments,
+           lcol = 1, lty = 3, lwd = 1)
+  as.list(environment())
+DefaultParslist = dcpParslist()
+@ %def DefaultParslist
+
+\subsubsection{Plot related arguments}
+\begin{description}
+\item[\texttt{cex}] specifies character expansion. Similar in usage
+  to other R plot functions. However, \verb|dotchartplus| also allows
+  specification of a range (min, max) within which the function
+  will choose the `best' cex to make most use of the (vertical)
+  space. Currently, this calculation only occurs at initial plot call,
+  and recalculations do not occur on resizing (although the user can
+  always re-plot after resizing).
+\item[\texttt{highlight}] specifies which points to highlight.
+  A vector specifying the indices of the values to highlight.
+  Where \verb|datlist| contains more than one group, \verb|highlight|
+  can also be a \verb|list| to individually specify highlighting
+  indices for each group.
+  Where more than one highlight method is desired, one can specify
+  a matrix rather than a vector of indices. Each column of the matrix
+  is considered a vector of indices, with the column determining
+  the highlight method.
+  For interaction with superpositioned points and the graphical
+  arguments, refer to Subsection \ref{sec:expandpars}.
+\end{description}
+
+\subsubsection{Layout related arguments}
+\begin{description}
+\item[\texttt{widths}] specify \verb|widths| of the plot region.
+  This excludes regions set aside for axes, labels or padding.
+  Similar in usage to \verb|layout|.
+\item[\texttt{heights}] specify \verb|heights| of the plot region.
+  This excludes regions set aside for axes, labels or padding.
+  Similar in usage to \verb|layout|.
+\item[\texttt{labwidths}] \advancedusers Specifies the \verb|widths|
+  of the text label region.
+  By default this will automatically be calculated to fit
+  the text labels exactly with slight padding, so specifying one
+  manually is not recommended.
+\item[\texttt{fpad}] specifies the `slight padding' used in
+  \verb|labwidths|. The default value is the width of the character
+  `m', which will vary as \verb|cex| varies.
+\item[\texttt{pad}] specifies padding rows and columns between each
+  panel of the plot region. Same usage as in \verb|LHdefault| (see
+  \verb|layouthelper.pdf|).
+\item[\texttt{padmar}] specifies the margins of the padding rows and
+  columns of \verb|pad|. The default value is the width of the
+  character `m'.
+\item[\texttt{border}] specifies the thickness in cm of the border to
+  be placed around the dotchart. Can be a vector of up to length 4, to
+  individually specify the thickness on the 4 sides individually.
+  This should be \verb|numeric| and not the \verb|character| result
+  of \verb|lcm|.
+\item[\texttt{newlayout}] \advancedusers Specifies whether a
+  new layout should be formed. If \verb|FALSE|, layout creation
+  will be skipped and the function will begin plotting on whatever
+  layout is currently in place.
+\end{description}
+
+\subsubsection{Axis related arguments (including axis labels)}
+\begin{description}
+\item[\texttt{axes}] specifies which axis should be drawn. Axis 1 and 3
+  are the numeric axes, while axis 2 and 4 are the text labels axes.
+  The function creates a layout appropriate for the current plot, hence
+  altering which \verb|axes| to draw will alter the layout and
+  appearance (mainly aspect ratio) of the plot.
+\item[\juxt{lab}{n}] specifies the label to plot for the axis specified
+  (i.e. \verb|lab1| is the label for axis 1, \verb|lab2| is for axis 2,
+  etc). Unlike specifying \verb|xlab|, specifying one of the
+  \juxt{lab}{n} arguments will always cause the label to be
+  plotted.
+\item[\texttt{labcexmult}] - \verb|cex| multiplier for the
+  \juxt{lab}{n}.
+\item[\texttt{percentile}] - \verb|logical| vector of length 1
+  specifying if a \verb|percentile| axis should be plotted.
+  This is only appropriate if the data is sorted in ascending order.
+  The \verb|percentile| axis is always plotted on axis 4.
+\item[\texttt{xlim}] - \verb|numeric| vector of length 2 giving the
+  x coordinate range. By default, the function will grab the range
+  of the data.
+  However \verb|dotchartplus| allows for a \verb|list| to be specified
+  as \verb|xlim|, which results in multiple panels being drawn, each
+  with the \verb|xlim| specified in the matching element of the
+  \verb|list|. This is usually used to have a `jump' in the x axis.
+\item[\texttt{xaxs}] - the style of axis interval calculation to be used
+  for the x axis. See \verb|par|.
+\item[\juxt{at}{n}] specifies the position of the tick marks for the
+  axis specified. Only appropriate for axis 1 and 3. See \verb|axis|.
+  As \verb|dotchartplus| allows for a \verb|list| to be specified
+  for \verb|xlim|, it also allows \juxt{at}{n} (along with
+  \juxt{atsmall}{n} and \juxt{atlabels}{n}) to be specified as a
+  \verb|list| to allow axis specification for each \verb|xlim|.
+\item[\juxt{atsmall}{n}] specifies the position of the small (`minor')
+  tick marks. Small ticks do not have labels.
+\item[\juxt{atlabels}{n}] specifies the labels for the tick marks
+  corresponding to \juxt{at}{n}. See \verb|axis|.
+\end{description}
+
+\subsubsection{Extra Labels related arguments}
+\begin{description}
+\item[\texttt{main}] specifies a main title. Works as you would expect.
+\item[\texttt{maincexmult}] - \verb|cex| multiplier for the main title.
+\item[\texttt{grouplabel}] - (Default \verb|NULL|). If \verb|datlist|
+  contains names for its groups (list elements), these are
+  automatically assigned to \verb|grouplabels|.
+  Otherwise, no group label is plotted.
+  If \verb|TRUE| will always cause a group label to be generated,
+  by assigning a letter of the alphabet to each group.
+  If \verb|FALSE| will always cause the group label to NOT be plotted.
+  Alternatively, can be a \verb|character| vector specifying the group
+  labels to plot. This must be the same length as the number of groups
+  in the \verb|datlist|.
+\item[\texttt{grouplabcexmult}] - \verb|cex| multiplier for the group
+  labels.
+\item[\texttt{grouplabadj}] - the \verb|adj| to be used for the group
+  labels. Takes a single number between 0 and 1, with 0 meaning draw
+  flush with the left edge of the panel left justified, and 1 meaning
+  the same thing but to the right.
+\item[\texttt{grouplabbg}] - the \verb|bg| colour for the group label
+  panel. Used mainly to clearly distinguish the group label panel
+  from the plotting regions.
+\item[\texttt{grouplabcol}] - the colour of the group labels.
+\item[\texttt{grouplabfont}] - the \verb|font| of the group labels.
+  See \verb|par|.
+\item[\texttt{setslabel}] - (Default \verb|NULL|). If there is more
+  than one set of data and the elements of \verb|datlist| contain
+  \verb|colnames|, these are automatically assigned to
+  \verb|setslabel|.
+  Alternatives are the same as in \verb|grouplabel|.
+\item[\texttt{setslabcexmult}] - \verb|cex| multiplier for the sets
+  labels.
+\end{description}
+
+\subsubsection{Graphical arguments}
+\textbf{Points}
+\begin{description}
+\item[\texttt{pfunc}] \advancedusers The function to use for
+  drawing the points. By default, this is \verb|points|, but
+  custom functions can give greater choice.
+\item[\texttt{pbg}] - the `background' colour of the points.
+  This usually means the interior of the points.
+  Only valid for certain \verb|pch|.
+\item[\texttt{pch}] - the point type. See \verb|par|.
+\item[\texttt{pcol}] - the outline colour of the points.
+\end{description}
+\textbf{Text Label}
+\begin{description}
+\item[\texttt{adj}] - text label justification.
+  Takes a single number between 0 and 1, with 0 meaning draw flush with
+  the left edge of the panel left justified, and 1 meaning the same
+  thing but to the right.
+  Where there are multiple columns of text labels, \verb|adj| can be
+  a \verb|vector| to individually specify \verb|adj| for each column.
+\item[\texttt{fcol}] - the colour of the text.
+\item[\texttt{font}] - the format of the text. 1 corresponds to
+  plain text (the default), 2 to bold face, 3 to italic and 4
+  to bold italic.
+\end{description}
+\textbf{Lines}
+\begin{description}
+\item[\texttt{full.lines}] specifies whether the dotted lines joining
+  the text labels to the points should end at the points (\verb|FALSE|)
+  or go from edge to edge (\verb|TRUE|). By default (\verb|NULL|) the
+  function checks if \verb|xlim| contains 0. If it does, then
+  \verb|full.lines| is set to \verb|FALSE|, otherwise it is set to
+  \verb|TRUE|.
+\item[\texttt{lfunc}] \advancedusers The function to use for
+  drawing the lines. By default, this is \verb|segments|, but
+  custom functions can give greater choice.
+\item[\texttt{lcol}] - the colour of the lines.
+\item[\texttt{lty}] - the type of line. See \verb|par|.
+\item[\texttt{lwd}] - the line width. See \verb|par|.
+\end{description}
+
+\section{Auxiliary Functions}
+\label{sec:Auxiliaries}
+There are three \emph{Primary} Auxiliary Functions: Layout, Plot
+and Expandpars. Layout is responsible for setting up an appropriate
+layout and Plot is responsible for plotting everything. In comparison
+Expandpars is a short and simple function, but it handles all graphical
+parameter related work, including how sets of data are distinguished
+and how points are highlighted, making it important.
+\emph{Secondary} Auxiliaries collect all remaining supporting functions.
+
+Note that in addition to these Auxiliary Functions, \verb|dotchartplus|
+also requires the Layout Helper Library to work.
+<<Auxiliary Functions>>=
+<<Layout Aux>>
+<<Plot Aux>>
+<<Expandpars Aux>>
+<<Secondary Auxiliaries>>
+@ 
+
+\subsection{The Layout Auxiliary}
+\label{sec:dcpLayout}
+The entire function is contained within a \verb|with| call, to allow
+the objects in \verb|parslist| to be visible.
+<<Layout Aux>>=
+dcpLayout =
+  function(parslist)
+  with(parslist, {
+    axes = layoutaxes
+    <<form plot region>>
+    <<attach axes>>
+    <<attach labels>>
+    <<attach main title area>>
+    <<add border>>
+    <<call layout>>
+    laymat
+  })
+@ %def dcpLayout
+
+\begin{figure}[htb]
+\includegraphics{dotchartplus-examples-007}
+\cprotect\caption{A reproduction of Figure 3.26 in The Elements of
+  Graphing Data (Cleveland, 1985, p145).
+  There are some minor differences, most notably in the positioning of
+  the group labels. This dotchart showcases many features of
+  \verb|dotchartplus| and will be used alongside the code to
+  graphically explain the purpose of the code.
+}
+\label{fig:demo2}
+\end{figure}
+
+\begin{figure}[htb]
+\includegraphics{dotchartplus-examples-009}
+\caption{A representation of the layout used to create Figure
+  \ref{fig:demo2}. Note that a modified form of \texttt{layout.show} was
+  used to show certain 0 regions, as these spaces will be used to plot
+  the axes using \texttt{axis} and \texttt{mtext}.}
+\label{fig:demo2lay}
+\end{figure}
+\clearpage
+
+\subsubsection{Forming the Plot Region}
+\label{sec:plotlay}
+If there is no \verb|grouplabel| specified, this is a straight-forward
+call to \verb|LHdefault|.
+If there is a \verb|grouplabel|, we must first create a single `panel',
+which we call \verb|vlay|. This panel sets up the main plotting region
+and the group label region, and while this is of a fixed form in the
+code (plot region with a single label region above), because of the
+modular fashion in which layouts are built with the
+\emph{Layout Helper}, it can be more complex if desired.
+
+We set the \verb|heights| to be an identifying \verb|character| vector,
+which we use to replace the plot region \verb|heights| and group
+label region \verb|heights| separately after replication.
+
+Once we have our completed layout, we need to check if we need a
+\verb|setslabel| and attach such a region.
+
+Finally, we update the \verb|metamat| (meta matrix) which is a
+$2\times3$ matrix which contains the following information regarding
+the \verb|laymat|:
+\begin{equation*}
+  \begin{bmatrix}
+    \text{Rows above plot region} & \text{Plot region rows} &
+      \text{Rows below plot region}\\
+    \text{Cols above plot region} & \text{Plot region cols} &
+      \text{Cols below plot region}
+  \end{bmatrix}
+\end{equation*}
+This information is useful for when we start attaching labels.
+<<form plot region>>=
+if(is.null(grouplabel)){
+  laymat = LHdefault(udim, pad = pad, padmar = padmar,
+    widths = widths, heights = heights)
+  } else{
+    vlay = LHdefault(c(2, 1), widths = "plot",
+      heights = c("plot", "grouplab"), reverse = TRUE)
+    ulay = rep(vlay, udim[1], udim[2], pad = pad,
+      padmar = padmar)
+    uwid = getwid(ulay)
+    uwid[uwid == "plot"] = widths
+    uhei = gethei(ulay)
+    uhei[uhei == "plot"] = heights
+    uhei[uhei == "grouplab"] =
+      llines(nlines(grouplabel) + 0.1, cex = grouplabcexmult)
+    laymat = newlayout(getmat(ulay), uwid, uhei)
+  }
+if(!is.null(setslabel))
+  laymat = rbind(laymat, LHdefault(fino = getfino(laymat),
+    heights = llines(nlines(setslabel) + 0.1,
+      cex = setslabcexmult)))
+metamat = matrix(c(0, 0, dim(getmat(laymat)), 0, 0), nrow = 2)
+@ %def laymat metamat
+\begin{figure}[htb]
+\centering
+\includegraphics[width=.6\textwidth]{dotchartplus-examples-010}
+\cprotect\caption{To create the main plot area with group labels,
+  we first create a single `panel' (called \verb|vlay| in the code),
+  which consists of the actual plot area and a group label area above
+  it. This is shown as the highlighted area in our figure.
+}
+\end{figure}
+\begin{figure}[htb]
+\centering
+\includegraphics[width=.6\textwidth]{dotchartplus-examples-011}
+\cprotect\caption{Once a single `panel' is created, it's easy to
+  replicate this to the required dimensions (3 in our case) using the
+  Layout Helper library's \verb|rep| method for layout objects.
+  The darker highlighted area represents what we have (\verb|vlay|),
+  while the lighter highlighted areas represent what \verb|rep| will
+  add (together, the highlighted areas represent our current layout).
+  Once we have created the desired \verb|ulay|, we have one more step,
+  which is to add the correct \verb|heights|.
+  This completes our \verb|laymat| for the plot region.}
+\end{figure}
+\clearpage
+
+\subsubsection{Attaching Axes Regions}
+\label{sec:axeslay}
+For the attaching of regions for the axes, we simply bind a
+$1\times1$ layout matrix numbered 0 with either \verb|widths| or
+\verb|heights| set to the computed \verb|axiswidhei|.
+These attached regions are essentially white space of the appropriate
+size, within which we can draw our axes.
+For each axis attached, we also update \verb|metamat| for later use.
+<<attach axes>>=
+if(any(axes == 1)){
+  laymat = rbind(laymat,
+    LHdefault(fino = 0, heights = axiswidhei[1]))
+  metamat[1, 3] = metamat[1, 3] + 1
+}
+if(any(axes == 2)){
+  laymat = cbind(LHdefault(fino = 0,
+    widths = axiswidhei[2]), laymat)
+  metamat[2, 1] = metamat[2, 1] + 1
+}
+if(any(axes == 3)){
+  laymat = rbind(LHdefault(fino = 0,
+    heights = axiswidhei[3]), laymat)
+  metamat[1, 1] = metamat[1, 1] + 1
+}
+if(any(axes == 4)){
+  laymat = cbind(laymat,
+    LHdefault(fino = 0, widths = axiswidhei[4]))
+  metamat[2, 3] = metamat[2, 3] + 1
+}
+@ 
+\begin{figure}[htb]
+\centering
+\includegraphics[width=.6\textwidth]{dotchartplus-examples-012}
+\cprotect\caption{Attaching an axis area is easy, the bind methods for
+  layout objects automatically stretch as necessary, so we can simply
+  bind a $1\times1$ layout object with the correct \verb|widths| or
+  \verb|height|, without having to factor in the dimensions of our
+  current layout.}
+\end{figure}
+\begin{figure}[htb]
+\centering
+\includegraphics[width=.6\textwidth]{dotchartplus-examples-013}
+\caption{The same process as before works for attaching further axis
+  regions, again because the bind methods automatically stretch to
+  the required dimensions.}
+\end{figure}
+\clearpage
+
+\subsubsection{Attaching Label Regions}
+\label{sec:labellay}
+As the attachment of label regions require long-ish calls but are quite
+similar, we define a function that does it.
+The function takes three arguments, the label (\verb|lab1|,
+\verb|lab2|, \verb|lab3| or \verb|lab4|), whether this label is a
+column vector (2 and 4 are, 1 and 3 are not) and whether to reverse the
+argument list.
+The default order has \verb|laymat| first, meaning the label
+will be attached to either the bottom or to the right, so we need to
+reverse the argument list for labels 2 and 3.
+
+The label region itself is created using \verb|LHlabels|.
+For precise mechanics, refer to the Layout Helper document.
+Essentially, we want our labels to be centred on the plot region only,
+and not over the axis regions as well.
+Thus, we use the information in the \verb|metamat| to create an
+appropriate vector that is numbered for the part that attaches to the
+plot region, and 0 for the part that attaches to the axis regions.
+We also assign an appropriate \verb|widths| or \verb|heights| based on
+the the lines of text in our label.
+<<attach labels>>=
+attachlabelsf = function(labn, colvec, reverse){
+  arglist = list(laymat,
+    LHlabels(c(0, getfino(laymat), 0),
+             metamat[2 - as.numeric(colvec),],
+             colvec = colvec,
+             widhei = llines(nlines(labn) + 0.1,
+               cex = labcexmult)))
+  if(reverse) arglist = rev(arglist)
+  do.call(if(colvec) "cbind" else "rbind", arglist)
+}
+if(!is.null(lab1)){
+  laymat = attachlabelsf(lab1, FALSE, FALSE)
+  metamat[1, 3] = metamat[1, 3] + 1
+}
+if(!is.null(lab2)){
+  laymat = attachlabelsf(lab2, TRUE, TRUE)
+  metamat[2, 1] = metamat[2, 1] + 1
+}
+if(!is.null(lab3)){
+  laymat = attachlabelsf(lab3, FALSE, TRUE)
+  metamat[1, 1] = metamat[1, 1] + 1
+}
+if(!is.null(lab4)){
+  laymat = attachlabelsf(lab4, TRUE, FALSE)
+  metamat[2, 3] = metamat[2, 3] + 1
+}
+@
+\begin{figure}[htb]
+\includegraphics{dotchartplus-examples-014}
+\caption{Attaching the label regions is slightly more complex than the
+  axis regions because we can't simply stretch to fit. We require our
+  labels to be centred on the plot region, and a simple stretch would
+  in fact centre it over both the plot and the axis region.}
+\end{figure}
+\clearpage
+
+\subsubsection{Finishing off the Layout}
+\label{sec:layfin}
+If some \verb|main| is supplied, attach an appropriate region to the top
+of the layout.
+<<attach main title area>>=
+if(!is.null(main))
+  laymat = rbind(LHdefault(fino = getfino(laymat),
+    heights = llines(nlines(main) + 0.1, cex = maincexmult)),
+    laymat)
+@ 
+
+If some positive \verb|border| is supplied, add this around our layout.
+<<add border>>=
+if(any(border > 0))
+  laymat = LHborder(laymat, border)
+@ 
+
+Finally we make a call to \verb|layout| via the Layout Helper function
+for convenience.
+We supply the \verb|cex| to revert the automatic change \verb|layout|
+will make (see \verb|help(layout)| for more details).
+<<call layout>>=
+LHcall(laymat, cex)
+@
+
+\subsection{The Plot Auxiliary}
+\label{sec:dcpPlot}
+The entire function is contained within a \verb|with| call, to allow
+the objects in \verb|parslist| to be visible.
+
+The function cycles through each `panel' and calls \verb|plotloop|.
+Once all the panels have been plotted, the remaining extra labels
+are drawn to finish off the plotting.
+<<Plot Aux>>=
+dcpPlot =
+  function(datlist, textlist, parslist)
+  with(parslist, {
+    <<plotloop>>
+    for(colj in 1:udim[2])
+      for(rowi in 1:udim[1])
+        plotloop(rowi, colj)
+    <<plot setslabel>>
+    <<plot xlab and main>>
+  })
+@ %def dcpPlot
+
+The \verb|plotloop| sub-function does most of the heavy-lifting.
+It is defined within the function and within the \verb|with| block,
+giving access to all the required variables without having to pass it
+through as arguments.
+The only required arguments are \verb|rowi| and \verb|colj| which
+specify which row and column of the plotting region we are currently
+plotting in, and hence which data to plot.
+<<plotloop>>=
+plotloop =
+  function(rowi, colj){
+    <<setup plot area>>
+    <<form graphpars>>
+    <<plot points and lines>>
+    <<plot numerical axis>>
+    <<plot percentile axis>>
+    <<plot text axis>>
+    <<plot grouplabel>>
+  }
+@ %def plotloop
+
+\subsubsection{Setting up the Plot Area}
+\label{sec:setupplot}
+As \verb|xlim| and \verb|ylim| are \verb|list| objects, we grab the
+appropriate one for this plot.
+
+We also compute \verb|x| and \verb|y| here, as they will be used for
+many of the subsequent processes.
+<<setup plot area>>=
+plot.new()
+plot.window(xlim = xlim[[colj]], ylim = ylim[[rowi]],
+            xaxs = xaxs, yaxs = "i")
+box()
+x = datlist[[rowi]]
+datlen = nrow(x)
+datcol = ncol(x)
+y = 1:datlen
+@ %def y datlen datcol
+
+We call \verb|expandpars| to expand the required graphical parameters
+to the vectorised form that we can use.
+<<form graphpars>>=
+graphpars = expandpars(parslist[c("fcol", "font",
+  "pbg", "pch", "pcol", "lcol", "lty", "lwd")], datlen,
+  datcol, highlight[[rowi]])
+@ 
+
+\subsubsection{Drawing the Points and Lines}
+\label{sec:plotpointslines}
+Our data, \verb|x|, is a matrix, with the columns indicating
+\emph{sets}.
+We desire to draw all \emph{sets} in a single vectorised call,
+so we create a vector version of \verb|x|, \verb|xv|, and likewise
+we create a \verb|yv| that matches the length of \verb|xv|.
+
+We also need to create two new vectors to be used as the start and end
+points of the lines. These values depend on whether full lines are
+specified or not.
+
+If \verb|full.lines = TRUE|, the the lines will all stretch from the
+left edge of the plot region to the right edge.
+We can obtain these points by calling \verb|par("usr")|.
+
+If \verb|full.lines = FALSE|, we set the lines to start from 0, and to
+end at \verb|xv|. We fix the start a 0 so that the length of the line
+has meaning (length corresponds to actual value).
+
+We now have our vectors in the required form, so it is simple to make a
+single call to \verb|lfunc| to draw our lines, and \verb|pfunc| to
+draw our points.
+<<plot points and lines>>=
+xv = as.vector(x)
+yv = rep(y, datcol)
+if(full.lines){
+  curusr = par("usr")
+  xstart = curusr[1]
+  xend = curusr[2]
+} else{
+  xstart = 0
+  xend = xv
+}
+
+lfunc(xstart, yv, xend, yv,
+         col = graphpars$lcol,
+         lty = graphpars$lty,
+         lwd = graphpars$lwd)
+pfunc(xv, yv,
+       bg = graphpars$pbg,
+       pch = graphpars$pch,
+       col = graphpars$pcol)
+@
+\begin{figure}[htb]
+\centering
+\includegraphics[width=\textwidth]{dotchartplus-examples-015}
+\caption{The plot so far. We have only drawn the points and dotted
+  lines, but the layout has also been drawn to some extent for
+  reference. In truth, this page should be blank except for the points
+  and dotted lines.}
+\end{figure}
+\clearpage
+
+\subsubsection{Drawing the Numerical Axes}
+\label{sec:plotaxes}
+The general idea is simple. We check if the particular axis is specified
+in \verb|axes|, and whether where we're currently plotting is at the
+very top (\verb|rowi = 1|) or at the very bottom
+(\verb|rowi = udim[1]|).
+We use \verb|axis.cus| to allow us to plot small ticks as well.
+Complications can arise if we have a region set aside for either the
+group or sets labels.
+In this case, we must compute the height of the group label region
+(\verb|labjump|) and specify the \verb|line| argument so the axis
+can jump over the label region and plot in the right place.
+
+The axis labels are plotted separately under `plot xlab and main',
+as those labels go in their own panel and are not done using
+\verb|mtext| (mainly for centering reasons).
+<<plot numerical axis>>=
+grouplabjump =
+  if(is.null(grouplabel)) NA
+  else (nlines(grouplabel) + 0.1) * grouplabcexmult
+setslabjump =
+  if(is.null(setslabel)) NA
+  else (nlines(setslabel) + 0.1) * setslabcexmult
+if(any(axes == 1) && rowi == udim[1])
+  axis.cus(1, at1[[colj]], atsmall1[[colj]], atlabels1[[colj]],
+           line = setslabjump)
+if(any(axes == 3) && rowi == 1)
+  axis.cus(3, at3[[colj]], atsmall3[[colj]], atlabels3[[colj]],
+           line = grouplabjump)
+@ 
+\begin{figure}[htb]
+\centering
+\includegraphics[width=\textwidth]{dotchartplus-examples-016}
+\caption{The plot so far. We have drawn the points, dotted lines
+  and the numerical axis. Because there are group labels, we had to
+  `jump' over it when plotting the numerical axis.
+}
+\end{figure}
+
+The `percentile' axis is special kind of numerical axis.
+The number of percentile tick marks is based on the size of the
+data. We can use \verb|quantile| to determine the actual values to
+place the tick marks.
+<<plot percentile axis>>=
+if(percentile == TRUE && colj == udim[2]){
+  pvaln = c(1, 2, 4, 5)[datlen < c(10, 20, 30, Inf)][1]
+  pvallabels = (0:pvaln)/pvaln
+  pvalat = quantile(y, pvallabels)
+  axis.cus(4, pvalat, NULL, pvallabels * 100)
+}
+@
+\clearpage
+\subsubsection{Drawing the Text Labels Axes}
+\label{sec:plottextlab}
+We draw these labels using \verb|mtext|, which is intended for text
+parallel with the plot edge, however in our case the orientation will
+be perpendicular, which will make things a little complicated.
+Further complicating matters, we can have columns of text that can
+be given different justification via \verb|adj|.
+These all lead to an involved \verb|txtjump| calculation which is
+covered in the next code chunk.
+
+Once we know \verb|txtjump|, the actual call is simple.
+As with the numerical axes above, we check if the axis is requested and
+whether we're currently plotting in an appropriate region.
+Then we loop through each column of the text labels to plot.
+
+For axis 2 (the left axis), our \verb|txtjump| requires a slight
+adjustment. As the natural reading direction is left-to-right, the
+\verb|txtjump| value is also from left-to-right. However, for axis 2,
+we require a jump from right-to-left. Thus, we first jump to the left
+edge of the text axis region (\verb|sum(labwidths) + fpad|),
+then take away our \verb|txtjump| value.
+
+That done, the remaining arguments to \verb|mtext| should be self
+explanatory.
+<<plot text axis>>=
+<<txtjump computation>>
+txt = textlist[[rowi]]
+if(any(axes == 2) && colj == 1)
+  for(txtcol in 1:ncol(txt)){
+    txtjump = sum(lcmTOlines(sumlcm(labwidths, fpad))) -
+      txtjumpf(txtcol)
+    mtext(txt[,txtcol], 2, txtjump, at = y,
+          adj = adj[txtcol], cex = cex, las = 2,
+          col = graphpars$fcol[1:datlen],
+          font = graphpars$font[1:datlen])
+  }
+if(any(axes == 4) && colj == udim[2])
+  for(txtcol in 1:ncol(txt)){
+    mtext(txt[,txtcol], 4, txtjumpf(txtcol), at = y,
+          adj = adj[txtcol], cex = cex, las = 2,
+          col = graphpars$fcol[1:datlen],
+          font = graphpars$font[1:datlen])
+  }
+@
+\begin{figure}[bth]
+\includegraphics{dotchartplus-examples-017}
+\caption{The plot so far. We have drawn the points, dotted lines,
+  numerical axis and text labels.
+  This figure also includes some visual aids to better understand
+  how the text label area is divided into columns for the text.
+}
+\end{figure}
+\clearpage
+
+It should be noted that most of our computed units are stored
+in cm, while \verb|mtext| shifting works in terms of lines of text.
+Thus, we make use of \verb|lcmTOlines| to convert cm values to lines
+of text.
+
+A reminder, \verb|labwidths| is a vector containing the largest width of
+each column of text, plus an \verb|fpad| for padding. The area set
+aside for the text labels is the sum of all the \verb|labwidths| plus
+an additional \verb|fpad|.
+Natural reading direction is left-to-right, so \verb|txtjumpf| is
+natural for axis 4.
+The computation is broken down thus:
+
+\begin{itemize}
+\item The first line is to jump \verb|fpad|.
+\item The second line is to jump over all previous column widths.
+\item The third line is the current column width, less the padding,
+  which is multiplied by...
+\item The fourth line, which is the \verb|adj| for the current column.
+\end{itemize}
+
+These combined give us the lines of text to jump from left-to-right.
+As mentioned above, this can be used directly for axis 4, but requires
+a little bit of extra work for axis 2.
+<<txtjump computation>>=
+txtjumpf = function(txtcol){
+  lcmTOlines(fpad) +
+    sum(lcmTOlines(labwidths[0:(txtcol - 1)])) +
+      lcmTOlines(sumlcm(labwidths[txtcol], -fpad)) *
+        adj[txtcol]
+}
+@ %def txtjumpf
+
+\subsubsection{Drawing the Extra Labels}
+\label{sec:extralabs}
+As we have an area set aside for drawing group labels, it's simple
+to call \verb|text.cus| to draw the thing.
+<<plot grouplabel>>=
+if(!is.null(grouplabel)){
+    text.cus(grouplabel[rowi],
+             pos = c(grouplabadj, 0.5),
+             col = grouplabcol,
+             font = grouplabfont,
+             cex = grouplabcexmult,
+             bg = grouplabbg)
+    box()
+  }
+@
+\begin{figure}[htb]
+\centering
+\includegraphics[width=.7\textwidth]{dotchartplus-examples-018}
+\caption{The plot so far. We have drawn the points, dotted lines,
+  numerical axis, text labels and group label. We now need to loop
+  through the remaining panels.
+}
+\end{figure}
+
+Drawing the sets labels is slightly harder.
+We need to grab what the points look like using \verb|expandpars|,
+then draw the labels in an appropriately spaced manner across the plot.
+<<plot setslabel>>=
+if(!is.null(setslabel)){
+  nsets = length(setslabel)
+  graphpars = expandpars(parslist[c("pbg", "pch",
+    "pcol")], 1, nsets)
+  plot.new()
+  plot.window(xlim = c(0.5, nsets + 1), ylim = c(0, 2),
+              xaxs = "i", yaxs = "i")
+  rect(0.5, 0, nsets + 1, 2, col = grouplabbg,
+       border = NA)
+  box()
+  pchjump = strwidth("MM")
+  for(i in 1:nsets){
+    points(i, 1, bg = graphpars$pbg[i],
+           col = graphpars$pcol[i], pch = graphpars$pch[i])
+    text(i + pchjump, 1, setslabel[i], adj = 0,
+         cex = setslabcexmult)
+  }
+}
+@ 
+
+Drawing of the `xlab' and main title are also simple as we will have 
+areas set aside for them.
+The vertical labels (2 and 4) are rotated 90 degrees in conventional
+R style.
+<<plot xlab and main>>=
+if(!is.null(lab1))
+  text.cus(lab1, labcexmult)
+if(!is.null(lab2))
+  text.cus(lab2, labcexmult, srt = 90)
+if(!is.null(lab3))
+  text.cus(lab3, labcexmult)
+if(!is.null(lab4))
+  text.cus(lab4, labcexmult, srt = 90)
+if(!is.null(main))
+  text.cus(main, maincexmult)
+@
+\begin{figure}[htb]
+\centering
+\includegraphics[width=.8\textwidth]{dotchartplus-examples-019}
+\caption{The plot so far. Having looped through all the panels,
+  it's now time to finish off the plot by drawing in the axis
+  labels.
+}
+\end{figure}
+\clearpage
+
+\subsection{The Expandpars Auxiliary}
+\label{sec:expandpars}
+The idea here is to consolidate the user arguments, specifically
+the graphical parameters, \emph{sets} and highlighting, into
+something that can be used directly in a vectorised call to the
+points and lines functions.
+
+The function will first assign the graphical parameters to the 
+\emph{sets} of data, then assign the remainder for use in highlighting.
+For instance, if there are \emph{n sets} of data, the first \emph{n}
+elements of the graphical parameters will be used to distinguish
+between the \emph{sets} of data.
+These graphical parameters are grabbed using \verb|lrow|,
+replicated to match the length of the data, then stored in a
+\verb|data.frame|, which allows us to extract specific columns
+(which will correspond to a specific graphical parameter, e.g.
+\verb|pch|), or specific rows (which will correspond to all the
+graphical parameters for a specific data point). Row operations
+using data frames in R are inefficient, but in our case the size
+of the data frame is small, so the convenience outweighs the
+inefficiency.
+
+If we have no highlighting, our job ends here, as we now have the
+required vectorised form.
+Highlighting occurs by replacing the appropriate subset of the
+data frame with the graphical parameters assigned to the particular
+highlight method.
+As we have used the first \emph{n} elements to distinguish between
+the \emph{sets} of data, the \emph{n + 1} element will be used for the
+first highlighting method (column 1 of the \verb|highlight| matrix),
+the \emph{n + 2} element will be used for the second highlighting
+method, and so on.
+This replacement uses the data frame row operations mentioned in the
+previous paragraph.
+
+The function takes four arguments. The \verb|parslist| argument is
+usually a subset of the full \verb|parslist| containing only the
+relevant graphical parameters
+(e.g. \verb|parslist[c("pbg", "pch", "pcol")]|).
+The next two arguments, \verb|nrows| and \verb|ncols|, are the rows and
+columns of the current \emph{group} of data
+(\verb|datlist[|\verb|[i]|\verb|]|), which will be a matrix.
+\verb|nrows| can be considered to be the length of the data,
+while \verb|ncols| is the number of \emph{sets} of data in the current
+group.
+The last argument, \verb|highsub| (which can be \verb|NULL|), is the
+\verb|highlight| specified for the current \emph{group}
+(\verb|highlight[|\verb|[i]|\verb|]|), and will also be a matrix.
+<<Expandpars Aux>>=
+expandpars =
+  function(parslist, nrows = 1, ncols = 1, highsub = NULL){
+    parsdf = lrow(parslist, 1:ncols)
+    dfcommand = "`=`(parsdf, data.frame("
+    for(i in 1:length(parsdf))
+      dfcommand = paste(dfcommand, names(parsdf)[i],
+        " = I(matrix(rep(parsdf[[", i,
+        "]], each = nrows), nrow = nrows)), ", sep = "")
+    dfcommand = paste(substr(dfcommand, 1,
+      nchar(dfcommand) - 2), "))", sep = "")
+    eval(parse(text = dfcommand))
+    if(!is.null(highsub))
+      for(j in 1:ncol(highsub)){
+        parsdf[highsub[,j],] =
+          data.frame(lrow(parslist, j * ncols + 1:ncols))
+      }
+    parsdf
+  }
+@ %def expandpars
+
+\subsection{Secondary Auxiliaries}
+\label{sec:SecondaryAux}
+The \emph{Secondary} Auxiliary Functions can also be called Trivial
+Auxiliaries. All the short and simple supporting functions are collected
+here.
+\begin{description}
+  \item[\texttt{llines}] - Calculates the height of \verb|x| lines of
+    text, expanded by \verb|cex|, in cm.
+  \item[\texttt{nlines}] - Calculates the number of lines in the given
+    character vector \verb|x| (i.e. returns count of \verb|"\n"| + 1).
+  \item[\texttt{lcmTOlines}] - A pseudo-inverse of \verb|llines|.
+    Converts x cm into a value relative to the height of lines of text.
+  \item[\texttt{strwidth.cm}] - Calculates the width of a character
+    string \verb|x|, with format \verb|font| and expanded by \verb|cex|,
+    in cm.
+  \item[\texttt{sumlcm}] - Sums cm values (i.e. character strings
+    created by \verb|lcm|, of the form ``x cm''), and outputs the sum
+    in cm.
+  \item[\texttt{axis.cus}] - A custom \verb|axis| function that can
+    support the plotting of `small' ticks (also known as `minor' ticks)
+    in addition to the regular ticks (also known as `major' ticks).
+    The small ticks always have \verb|tcl| (tick size) half the size
+    of the regular ticks, and never have labels. An example call is:
+    \verb|axis.cus(side = 1, at = 2 * (0:5), atsmall = 1:9)|,
+    which will plot a regular ticks with default labels at
+    0, 2, ..., 10, and small ticks at 1, 3, ..., 9 (technically, small
+    ticks are plotted at 1, 2, ..., 9, however, some of these will be
+    hidden by the regular ticks).
+  \item[\texttt{text.cus}] - A custom \verb|text| function, meant to be
+    a `high-level' text plotting function.
+    The function will form a new plotting area, set the \verb|x| and
+    \verb|y| limits to be exactly 0 and 1, then plot the text given
+    at the position given, with character expansion \verb|cex|.
+    Thus, \verb|pos| should be specify the \verb|x| and \verb|y|
+    coordinates on a scale from 0 to 1, where (0, 0) specifies the
+    lower-left corner, and (1, 1) specifies the upper-right.
+  \item[\texttt{lrow}] - A function to obtain the `rows' of a list.
+    In effect, it's like taking the row subset of a data.frame, but
+    \verb|lrow| features automatic recycling, and its output remains
+    a list object. Without the recycling feature, \verb|lrow(lobj, i)|
+    is similar conceptually to \verb|lobj[i,]|.
+\end{description}
+<<Secondary Auxiliaries>>=
+llines = function(x, cex = 1)
+  lcm(2.54 * cex * x * par("csi"))
+nlines = function(x)
+  nchar(x) - nchar(gsub("\n", "", x)) + 1
+lcmTOlines = function(x, cex = 1)
+  as.numeric(sub(" cm", "", x))/(2.54 * cex * par("csi"))
+strwidth.cm =
+  Vectorize(function(x, font = par("font"), cex = 1)
+            2.54 * strwidth(x, "inches", font = font, cex = cex))
+sumlcm = function(...)
+  lcm(do.call(sum, lapply(list(...), function(x)
+                          as.numeric(sub(" cm", "", x)))))
+axis.cus =
+  function(side, at = NULL, atsmall = NULL, labels = TRUE,
+           tcl = par("tcl"), ...){
+    if(!is.null(atsmall))
+      axis(side, at = atsmall, labels = FALSE, tcl = tcl/2, ...)
+    axis(side, at = at, labels = labels, tcl = tcl, ...)
+  }
+text.cus =
+  function(txt, cex = 1, pos = c(0.5, 0.5), bg = NULL, ...){
+    plot.new()
+    plot.window(xlim = 0:1, ylim = 0:1, xaxs = "i", yaxs = "i")
+    if(!is.null(bg))
+      rect(0, 0, 1, 1, col = bg, border = NA)
+    text(pos[1], pos[2], txt, adj = pos, cex = cex, ...)
+  }
+lrow = function(lobj, row)
+  lapply(lobj, function(x) x[(row - 1) %% length(x) + 1])
+@ %def llines nlines lcmTOlines strwidth.cm sumlcm axis.cus text.cus lrow
+
+\section{The Back End}
+We place a document header at the top of the extracted code to encourage
+people to read the literate description.
+<<document header>>=
+##-----------------------------------------------------------
+## The code in this .R file is machine generated.
+## To understand the program, read the literate description
+##  pdf rather than studying just the R code.
+##-----------------------------------------------------------
+@
+
+\subsection{Back End Computation}
+\label{sec:backendcomp}
+The following is a collection of the various preliminary computations
+that are required before the actual plotting of the dotchart. Here, cag
+stands for `check and generate'.
+<<back end work>>=
+<<pass on pars to parslist>>
+<<check and force datlist to matrix>>
+<<compute best cex>>
+<<save original par and opt>>
+<<cag textlist>>
+parslist = with(parslist, {
+  <<cag xlim>>
+  <<cag fulllines>>
+  <<cag axis at>>
+  <<generate ylim>>
+  <<cag adj>>
+  <<check highlight>>
+  <<compute udim>>
+  <<adjust axes for percentile>>
+  <<cag grouplabel>>
+  <<cag setslabel>>
+  <<cag widths and heights>>
+  <<layout required computations>>
+  <<return updated parslist>>
+})
+@ %def parslist
+
+Optional arguments specified in `\verb|...|' are passed through to
+\verb|parslist| via name matching, except in the case of the `special
+arguments', \verb|at|, \verb|atsmall|, \verb|atlabels|, \verb|col|
+and \verb|xlab|, which are passed through based on the rules mentioned
+in Section \ref{sec:dcp.default}.
+<<pass on pars to parslist>>=
+if(!is.null(col))
+  parslist$pbg = col
+if(!is.null(at))
+  for(subs in c("at1", "at3"))
+    parslist[[subs]] = at
+if(!is.null(atsmall))
+  for(subs in c("atsmall1", "atsmall3"))
+    parslist[[subs]] = atsmall
+if(!is.null(atlabels))
+  for(subs in c("atlabels1", "atlabels3"))
+    parslist[[subs]] = atlabels
+optpars = list(...)
+for(i in 1:length(optpars))
+  if(any(names(parslist) == names(optpars)[i]))
+    parslist[names(optpars)[i]] = optpars[i]
+if(!is.null(xlab)){
+  if(any(parslist$axes == 1))
+    parslist$lab1 = xlab
+  if(any(parslist$axes == 3))
+    parslist$lab3 = xlab
+  }
+@
+
+The default \verb|dotchartplus| can accept lists containing both vectors
+or matrices, but for processing purposes, we desire it to be all the
+same type.
+As vectors are easily coerced into matrices, this is what we do.
+<<check and force datlist to matrix>>=
+if(!is.list(datlist))
+  stop("datlist must be a list.")
+datlist = lapply(datlist, as.matrix)
+@ 
+
+This code chunk contains some complicated looking calculations.
+Essentially, it is taking into account all the text in the dotchart
+and computing a \verb|cex| value that minimises wasted white (vertical)
+space.
+<<compute best cex>>=
+parslist$cex = with(parslist, {
+  cex = rep(cex, length = 2)
+  cex.best = function(){
+    dat.length = sum(sapply(datlist, function(x) nrow(x) + 2))
+    total.lines = 1.05 * dat.length +
+      2.6 * (any(axes == 1) + any(axes == 3)) +
+        labcexmult * (!is.null(lab1) + !is.null(lab3)) +
+          maincexmult * (!is.null(main))
+    dcm = 2.54 * par("din")[2] - 2 * border
+    cm.per.line = dcm/total.lines
+    cm.per.line/(2.54 * par("csi"))
+  }
+  min(max(cex[1], cex.best()), cex[2])
+})
+@ 
+
+The \verb|dotchartplus| function needs to make some changes to
+\verb|par| and \verb|options|.
+We set \verb|cex| to the specified \verb|cex|, and set \verb|mar| to 0,
+as margins will be handled via \verb|layout|.
+The \verb|stringsAsFactors| option is set to \verb|FALSE| as a
+\verb|data.frame| is used in some of the processing, and we require
+\verb|strings| (\verb|character| vectors) to remain as \verb|strings|.
+The original \verb|par| and \verb|options| are saved and are restored
+once \verb|dotchartplus| finishes running via a call to \verb|on.exit|.
+
+If \verb|newlayout = TRUE|, we also desire to restore the original
+\verb|layout|.
+However there exists no way to query whether the existing \verb|layout|
+was done by a call to \verb|mfcol|, \verb|mfrow| or \verb|layout|.
+Having no means to restore the original, instead we will call
+\verb|layout(1)|, to restore the \verb|layout| to a `pseudo-default'
+state.
+<<save original par and opt>>=
+opar = par(cex = parslist$cex, mar = rep(0, 4))
+oopt = options(stringsAsFactors = FALSE)
+on.exit({
+  par(opar)
+  options(oopt)})
+if(parslist$newlayout)
+  on.exit(layout(1), add = TRUE)
+@
+
+If no \verb|textlist| is provided, we try to make one by taking the
+rownames of the matrices in the \verb|datlist|.
+If the lengths of \verb|textlist| don't match with the corresponding
+element of \verb|datlist|, we generate a new one ourselves using a
+combination of letters and numbers (following the pattern A1, A2, ...
+for group 1. B1, B2, ... for group 2, etc).
+Note that if no rownames were found, the result will be \verb|NULL|.
+We define a new function, \verb|txtlen| to compute the `length' of
+each element of \verb|textlist|.
+This is required because \verb|textlist| can be \verb|NULL|, a
+\verb|vector| or a \verb|matrix|. We can't directly tackle the problem
+using \verb|as.matrix| because such a call on \verb|NULL| will fail.
+So we must first check if it is \verb|NULL|, in which case we return 0
+(\verb|length(NULL)|). Otherwise we call \verb|as.matrix| and compute
+the rows.
+As with \verb|datlist| above, we again coerce every entry into a matrix.
+Note that where a \verb|textlist| is provided, the code does not
+currently check if it is appropriate (e.g. that the lengths match).
+<<cag textlist>>=
+if(is.null(textlist))
+  textlist = lapply(datlist, rownames)
+txtlen = function(txt)
+  if(is.null(txt)) 0 else nrow(as.matrix(txt))
+for(i in 1:length(datlist)){
+  if(txtlen(textlist[[i]]) != nrow(datlist[[i]]))
+    textlist[[i]] =
+      paste(LETTERS[i], 1:nrow(datlist[[i]]) , sep = "")
+}
+textlist = lapply(textlist, as.matrix)
+@ %def textlist
+
+\subsubsection{Parslist Wetwork}
+\label{sec:parslistwetwork}
+This subsubsection details operations done inside the
+\verb|with(parslist)|.
+This gives access to all the elements of \verb|parslist|.
+At the end of all the `wetwork', the updated variables are all
+collected into a \verb|list| to update our \verb|parslist|.
+
+If no \verb|xlim| is provided, we generate one by taking the range of
+all values in the \verb|datlist|.
+Similarly with \verb|datlist| above, we coerce \verb|xlim| into a list
+for convenience.
+Finally, we ensure that each \verb|xlim| is of the correct length (2).
+<<cag xlim>>=
+if(is.null(xlim))
+  xlim = range(unlist(datlist))
+if(!is.list(xlim))
+  xlim = list(xlim)
+xlim = lapply(xlim, function(x) rep(x, length = 2))
+@ %def xlim
+
+Having \verb|full.lines = FALSE| only makes sense if the lines will
+carry meaning. Thus, by default (\verb|NULL|), check if \verb|xlim|
+contains 0 and there is no split (\verb|length(xlim) > 1|).
+Then set \verb|full.lines| as appropriate.
+<<cag fulllines>>=
+if(is.null(full.lines))
+  if((all(xlim[[1]] != 0) &&
+      sum(sign(xlim[[1]] + diff(xlim[[1]]) *
+               0.04 * c(-1, 1))) != 0) || length(xlim) > 1)
+    full.lines = TRUE
+  else
+    full.lines = FALSE
+@ 
+
+To allow individual assignment of \verb|at|, \verb|atsmall| and
+\verb|atlabels| for each split of the \verb|xlim|, we require a list,
+which should match the length of \verb|xlim|.
+For code-length efficiency, we do this using a loop with \verb|eval|,
+\verb|substitute| and \verb|get|.
+
+What this actually does it quite simple. The essence of it is:
+\begin{verbatim}
+  if(!is.list(at1)) at1 = list(at1);
+  at1 = rep(at1, length = length(xlim))
+\end{verbatim}
+That is, if \verb|at1| is not a list, we place it in a list.
+Then we recycle to match the length of \verb|xlim|.
+However, we need to do this not just for \verb|at1|, but also for
+\verb|atsmall1|, \verb|at3|, etc. So we loop through each of these.
+<<cag axis at>>=
+for(subs in c("at1", "at3", "atsmall1", "atsmall3",
+              "atlabels1", "atlabels3"))
+  eval({
+    substitute({
+      if(!is.list(get(curat))) `=`(curat, list(get(curat)));
+      `=`(curat, rep(get(curat), length = length(xlim)))},
+               list(curat = subs))
+  })
+@ 
+
+We require some kind of \verb|ylim| to order the data. It makes
+intuitive sense for each positive integer value of \verb|y| (1, 2, 3,
+...) to represent a data point, and we wish for a slight bit of padding
+at the top and bottom, so we generate \verb|ylim| by taking 0.25 as the
+lower limit and the number of data points + 0.75 (\verb|nrow(x) + 0.75|)
+as the upper limit, which gives us 0.75 padding on either end.
+<<generate ylim>>=
+ylim = lapply(datlist, function(x) c(0.25, nrow(x) + 0.75))
+@ %def ylim
+
+We require \verb|adj| to match the number of columns in \verb|textlist|.
+<<cag adj>>=
+adj = rep(adj, length = ncol(textlist[[1]]))
+@ 
+
+As with \verb|xlim| and \verb|datlist| above, we coerce
+\verb|highlight| into a list containing matrices.
+We also check to make sure that the highlight subset specified is a
+valid one (as per usual R subset rules) by checking the signs.
+If it is invalid, that particular subset is effectively removed (by
+setting to 0) and a warning message is given.
+Finally, we replicate \verb|highlight| to match the length of
+\verb|datlist|.
+<<check highlight>>=
+if(!is.null(highlight)){
+  if(!is.list(highlight))
+    highlight = list(highlight)
+  highlight = lapply(highlight, as.matrix)
+  highlight = lapply(highlight, function(x){
+    for(j in 1:ncol(x))
+      if(!all(sign(x[,j]) >= 0) && !all(sign(x[,j]) <= 0)){
+        warning(paste("Only 0's may be mixed with negative",
+                      "subscripts.",
+                      "\nInvalid highlight columns removed."),
+                call. = FALSE)
+        x[,j] = 0
+      }
+    x
+  })
+  highlight = rep(highlight, length = length(datlist))
+}
+@ 
+
+We compute the \verb|udim| (`useful' dimensions, see the Layout Helper
+for more details) simply by taking the length of \verb|ylim| and
+\verb|xlim|, which will give us the number of elements in the respective
+lists, and hence the `useful' dimensions of our plotting area.
+Additionally we also replicate \verb|pad| to the correct length here.
+<<compute udim>>=
+udim = c(length(ylim), length(xlim))
+pad = rep(pad, length = 2)
+@ %def udim
+
+The \verb|percentile| axis is always plotted on axis 4 (to the right of
+the plot). Hence if \verb|percentile| is specified but the user has
+also specified axis 4 in \verb|axes|, this is overriden with a warning.
+<<adjust axes for percentile>>=
+if(percentile && any(axes == 4)){
+  warning(paste("The percentile axis is always drawn on axis",
+                "4 (to the right of the plot).",
+                "The specification of axis 4 for a label",
+                "axis has been overriden to accomodate the",
+                "percentile axis.", sep = ""),
+          call. = FALSE)
+  axes = axes[axes != 4]
+  }
+@ 
+
+The \verb|grouplabel| argument can take four types.
+\begin{description}
+\item[\texttt{NULL}] - the default. If \verb|datlist| contains names
+  for its groups (list elements), these are automatically assigned to
+  \verb|grouplabels|. Otherwise, no group label is plotted.
+\item[\texttt{TRUE}] - will always cause a group label to be generated,
+  by assigning a letter of the alphabet to each group.
+\item[\texttt{FALSE}] - will always cause the group label to NOT be
+  plotted.
+\item[\texttt{character}] - a \verb|character| vector of the same
+  length as the number of groups in the \verb|datlist|, specifying
+  the labels.
+\end{description}
+After this code chunk, \verb|grouplabel| can be a \verb|character|
+vector, or something else that says to not plot the \verb|grouplabel|.
+Consistency with argument evaluation would mean this `something else' is
+\verb|FALSE|. However, a \verb|logical| is still a vector.
+For a more elegant method of distinguishing between plotting and not
+plotting, the `something else' is instead chosen to be \verb|NULL|.
+<<cag grouplabel>>=
+if(is.null(grouplabel))
+  grouplabel = names(datlist)
+if(any(grouplabel == TRUE))
+  grouplabel = paste("Group", LETTERS[1:length(datlist)])
+if(any(grouplabel == FALSE))
+  grouplabel = NULL
+if(!is.null(grouplabel) &&
+   length(datlist) != length(grouplabel)){
+  grouplabel = NULL
+  warning(paste("length(datlist) != length(grouplabel).",
+                "grouplabel forced to NULL"),
+          call. = FALSE)
+}
+@ 
+
+The \verb|setslabel| argument is corrected in much the same way
+as \verb|grouplabel| above, and takes the same types of arguments.
+<<cag setslabel>>=
+if(is.null(setslabel) && (ncol(datlist[[1]]) > 1))
+  setslabel = dimnames(datlist[[1]])[[2]]
+if(any(setslabel == FALSE))
+  setslabel = NULL
+if(!is.null(setslabel) &&
+   ncol(datlist[[1]]) != length(setslabel)){
+  setslabel = NULL
+  warning(paste("ncol(datlist[[1]]) != length(sets",
+                "label)). setslabel forced to NULL",
+                sep = ""), call. = FALSE)
+}
+@ 
+
+If no \verb|widths| or \verb|heights| are provided, the default is to
+create one such that resolution is preserved across the panels, i.e.
+the same distance will represent the same numerical difference.
+This is done by simply taking the difference of the \verb|xlim| and
+\verb|ylim| values for each panel, and setting this to be our
+\verb|widths| or \verb|heights| (respectively),
+e.g. If we had one group with 10 data points and another with 5 data
+points, the \verb|heights| assigned will be 10 and 5, so the group
+with twice as many data points has twice the height.
+
+The \verb|labwidth| computation is somewhat more complex, and covered
+in its own code chunk.
+
+<<cag widths and heights>>=
+if(is.null(widths))
+  widths = abs(sapply(xlim, diff))
+if(is.null(heights))
+  heights = abs(sapply(ylim, diff))
+if(is.null(padmar))
+  padmar = lcm(rep(strwidth.cm("m"), 2))
+if(is.null(fpad))
+  fpad = strwidth.cm("m")
+if(is.null(labwidths)){
+  <<labwidths computation>>
+  labwidths = labwidthsf()
+  rm(labwidthsf)
+}
+@ %def widths heights padmar fpad labwidths
+
+The \verb|textlist| is a list containing matrices.
+Each column of the matrix represents a different column of
+text labels, so we wish to obtain the widths of each column.
+We do this by looping through the list, computing the \verb|highlight|
+adjusted string widths for each column, and storing this in a matrix
+(\verb|labwidmat|).
+Then we use \verb|apply| on the columns of \verb|labwidmat| to extract
+the maximum label width for each column. We add \verb|fpad| to give a
+slight bit of white space along the sides, so the labels don't extend
+to the very edges of their column.
+<<labwidths computation>>=
+labwidthsf = function(){
+  textlen = length(textlist)
+  textcols = ncol(textlist[[1]])
+  labwidmat = matrix(NA, nrow = textlen, ncol = textcols)
+  for(i in 1:textlen){
+    curtext = textlist[[i]]
+    curfont = expandpars(parslist["font"], nrow(curtext),
+      ncol(datlist[[i]]), highlight[[i]])
+    for(j in 1:textcols)
+      labwidmat[i, j] = max(strwidth.cm(curtext[,j],
+                 font = curfont$font[1:nrow(curtext)]))
+  }
+  lcm(apply(labwidmat, 2, max) + fpad)
+}
+@ %def labwidthsf
+
+The required layout computations is merely the \verb|widths| and
+\verb|heights| of the 4 axes.
+Axes 1 and 3 (bottom and top) will always have tick axis plotted, so
+2.6 lines of text is assigned.
+Axis 2 (left) will always have a text axis plotted, so it is the sum
+of the individual \verb|labwidths| (using \verb|sumlcm| as
+\verb|labwidths| is stored as a character string including ` cm') plus
+an additional \verb|fpad|.
+Axis 4 (right) can be a tick axis (if \verb|percentile == TRUE|) or it
+could also be a text axis.
+This vector of \verb|widths| and \verb|heights| is passed to the
+\emph{Layout Child}, which then uses these as required depending on
+which \verb|axes| are asked for.
+<<layout required computations>>=
+axiswidhei = numeric(4)
+axiswidhei[c(1, 3)] = llines(2.6)
+axiswidhei[c(2, 4)] = sumlcm(labwidths, fpad)
+if(percentile){
+ layoutaxes = c(axes, 4)
+ lab4 = "Percentile"
+ axiswidhei[4] = llines(2.6)
+} else layoutaxes = axes
+@ %def axiswidhei
+
+All the changes we have made to the elements of \verb|parslist| are
+now returned.
+<<return updated parslist>>=
+as.list(environment())
+@ 
+
+\subsection{Call Primary Auxiliaries}
+\label{sec:callPrimaryAux}
+If \verb|newlayout| is true, we call the \emph{Layout Auxiliary}
+to set-up a new layout.
+We also save this to \verb|laymat| to be returned invisibly later.
+<<call layout aux>>=
+laymat = if(parslist$newlayout) dcpLayout(parslist) else NULL
+@ 
+
+Once the layout has been set (either beforehand or by the call to the
+\emph{Layout Auxiliary}, we call the \emph{Plot Auxiliary} to do the
+actual plotting.
+<<call plot aux>>=
+dcpPlot(datlist, textlist, parslist)
+@
+
+While \verb|dotchartplus| will usually be called for its `side-effect'
+of producing a dotchart, it also returns some objects invisibly.
+The returned \verb|parslist| is the one that has been fully updated with
+any optional arguments.
+<<return various as invisible>>=
+invisible(list(layout = laymat, parslist = parslist))
+@ 
+
+\section{Chunk Index}
+\label{sec:chunk-index}
+\nowebchunks
+
+\section{Identifier Index}
+\label{sec:identifier-index}
+Numbers indicate the chunks in which the function appears.
+Underline indicates the chunk where the function is defined.
+\medskip
+
+\nowebindex
+\newpage
+
+\section{References}
+\label{sec:refs}
+\begin{itemize}
+\item Cleveland, W. S. (1985) \textbf{The Elements of Graphing Data.}
+  Monterey, CA: Wadsworth.
+\item Ihaka, R. (2011) \textbf{The brain of.} 303.375.
+\item R Development Core Team (2011). \textbf{R: A language and
+    environment for statistical computing.}
+  R Foundation for Statistical Computing,
+  Vienna, Austria. ISBN 3-900051-07-0, URL http://www.R-project.org/.
+\item Ramsey, N. (1994) \textbf{Literate programming simplified.}
+  IEEE Software. URL http://www.cs.tufts.edu/$\sim$nr/noweb/.
+\end{itemize}
+
+\end{document}

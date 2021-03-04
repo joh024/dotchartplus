@@ -1,0 +1,219 @@
+\documentclass[a4paper]{article}
+\usepackage{noweb}
+\noweboptions{english}
+\usepackage{amsmath}
+\newcommand{\meta}[1]{\emph{#1}}
+\newcommand{\expr}[1]{\text{\emph{expr}}_{#1}}
+\begin{document}
+\title{\textbf{A Simple Function for \\ Parsing Model Formulae}}
+\author{\textit{Ross Ihaka} \\[12pt]
+Department of Statistics \\ University of Auckland}
+\date{}
+\maketitle
+\section{Introduction}
+\label{sec:introduction}
+This code accepts a class of \emph{model formulae} that describe
+models for graphical applications.  The Backus-Naur Form for the
+grammar describing the formulae is as follows:
+\begin{quote}
+  \begin{tabular}{ll}
+    \meta{formula}: & `$\;\sim$' \meta{right-side} \\
+             & \meta{left-side} `$\;\sim$' \meta{right-side} \\[3mm]
+
+    \meta{left-side}: & \meta{variable-list} \\[3mm]
+
+    \meta{right-side}: &  \meta{variable-list} \\
+                & \meta{variable-list} `$\;|$' \meta{variable-list} \\[3mm]
+
+    \meta{variable-list}: & \meta{variable} \\
+             & \meta{variable-list} `$\;+$' \meta{variable}
+  \end{tabular}
+\end{quote}
+
+At the lowest level, a formula is composed of \emph{variables}. In
+this context, a variable is any R expression other than a simple sum
+of two variables (i.e. $\expr{1}+\expr{2}$).\footnote{Such simple sums
+  can be protected by \emph{quoting} them with the \texttt{I()}
+  function.}  A \meta{variable-list} is a set of variables separated
+by `$+$.'
+
+At the highest level, a \emph{formula} has exactly one `$\sim$' in it
+with an optional \emph{left-side} and a required \emph{right-side}.  A
+\emph{left-side} is a variable-list and a \emph{right-side} consists
+of a variable-list followed by an optional `$\,|\,$' with a following
+variable-list.
+
+Note that in this gammar, \emph{left-side} is simply a synonym for
+\emph{variable-list}.  This means that the grammar can be simplified
+by removing the \emph{left-side} production.
+\begin{quote}
+  \begin{tabular}{ll}
+    \meta{formula}: & `$\;\sim$' \meta{right-side} \\
+             & \meta{variable-list} `$\;\sim$' \meta{right-side} \\[3mm]
+
+    \meta{right-side}: &  \meta{variable-list} \\
+                & \meta{variable-list} `$\;|$' \meta{variable-list} \\[3mm]
+
+    \meta{variable-list}: & \meta{variable} \\
+             & \meta{variable-list} `$\;+$' \meta{variable}
+  \end{tabular}
+\end{quote}
+The code provided by this source module takes apart a model formula
+described by by the grammar and returns a list containing components
+named [[lhs]], [[rhs]], and [[condition]].
+
+The function provided by this R code is an example of a
+recursive-descent parser that can be used to parse a restricted class
+of model formulae.
+
+\section{Code Layout}
+\label{sec:code-layout}
+This software consists of a \emph{main function} together with a
+number of supporting \emph{utility functions} and associated constant
+definitions. The code is collected in a file called [[formulae.R]],
+which is structured as follows.
+\codemargin=24pt
+<<formulae.R>>=
+parseFormula = local({
+    <<constants>>
+    <<parsing functions>>
+})
+@ %def parseFormula
+
+The constants, utility functions and main function are defined within
+a [[local]] block whose value is the main function. This provides a
+way of hiding the utility functions in a scope which is only visible
+within the body of the function [[parseFormula]].
+
+\section{Constants}
+\label{sec:constants}
+The local definition of constants provides a quick way of looking up
+some important values that are used in the parser. This is essentially
+an optimisation that avoids repeated calls to [[as.name]] to carry out
+a symbol look up.
+
+<<constants>>=
+TILDE    = as.name("~")
+BAR      = as.name("|")
+PLUS     = as.name("+")
+IDENTITY = as.name("I")        
+@ %
+
+\section{Parsing Functions}
+\label{sec:parsing-functions}
+
+The actual parsing of formulae is carried out by three functions; one
+for each rule in the grammar. In addition, there is a function that
+removes any quotation using the [[I()]] mechanism.
+<<parsing functions>>=
+<<strip protection>>
+<<variable list processing>>
+<<right-hand side processing>>
+<<main parsing function>>
+@ %
+
+\subsection{Stripping Quotation}
+\label{sec:stripping-quotation}
+
+For expressions of the form [[I(]]\meta{expr}[[)]], the value of
+\meta{expr} is returned.  Any occurences of [[I]] that do not have
+exactly one argument will trip an error.
+
+<<strip protection>>=
+stripI =
+    function(e) {
+        if (is.call(e) && identical(e[[1]], IDENTITY)) {
+            if (length(e) == 2)
+                e[[2]]
+            else
+                stop("incorrect use of I()")
+        }
+        else e
+    }   
+@ %def stripI
+\subsection{Variable List Processing}
+\label{sec:variable-list-processing}
+
+Variable lists are processed as follows:
+\begin{itemize}
+\item If the argument consists of an expression of the form
+  $\expr{1}+\expr{2}$, the elements in $\expr{1}$ are extracted by a
+  recursive call to [[element.list]] and then the element in
+  $\expr{2}$ (with any protecting [[I()]] stripped) is appended to
+  this list.
+\item Any other argument is treated as simple formula element. Such an
+  elements is stripped of any protecting [[I()]] quotation and
+  returned in a list.
+\end{itemize}
+<<variable list processing>>=
+element.list =
+    function(expr) {
+        if (is.call(expr) && identical(expr[[1]], PLUS))
+            if (length(expr) == 3)
+                c(element.list(expr[[2]]),
+                  stripI(expr[[3]]))
+            else 
+                stop("invalid element list")
+        else
+            list(stripI(expr))
+    }
+@ %def element.list
+
+\subsection{Right-Hand Side Processing}
+\label{sec:right-hand-side-processing}
+
+If the argument to this function is an expression of the form
+$\expr{1}\,|\,\expr{2}$ the result is a list containing a component
+called [[rhs]] containing the variable list extracted from $\expr{1}$
+and a component [[condition]] containing the variables extracted from
+$\expr{2}$. In any other case, the result is similar, but the
+[[condition]] component is [[NULL]].
+
+<<right-hand side processing>>=
+right.side =
+    function(e) {
+        if (is.call(e) && identical(e[[1]], BAR)) {
+            if(length(e) == 3)
+                list(rhs = element.list(e[[2]]),
+                     condition = element.list(e[[3]]))
+            else
+                stop("invalid formula rhs")
+        }
+        else
+            list(rhs = element.list(e),
+                 condition = NULL)
+    }
+@ %def right.side
+
+\subsection{Main Parsing Function}
+\label{sec:main-parsing-function}
+
+The main parsing function processes an expression of the from
+$\expr{1} \sim \expr{2}$ and returns a list containing components
+[[lhs]], [[rhs]] and [[condition]] which hold the lists of variables
+extracted from the three (possibly empty) components of the formula.
+
+<<main parsing function>>=
+formula =
+    function(expr) {
+        if (is.call(expr)
+                && identical(expr[[1]], TILDE)) {
+            if(length(expr) == 2)
+                c(lhs = list(),
+                  right.side(expr[[2]]))
+            else if (length(expr) == 3)
+                c(lhs = list(element.list(expr[[2]])),
+                  right.side(expr[[3]]))
+            else
+                stop("invalid formula")
+        }
+        else
+            stop("missing ~ in formula\n")
+    }
+@ %def formula
+
+\section{Defined Chunks}
+\nowebchunks
+\section{Index}
+\nowebindex
+\end{document}
