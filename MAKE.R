@@ -1,6 +1,6 @@
 source("Rnoweb.R")
 for(curf in c("layouthelper", "formulae", "dotchartplus", "dotchartplus-demos"))
-  Rnoweb(paste0(curf, ".Rnw"))
+  noweb(paste0(curf, ".Rnw"))
 
 ## Build images for rendering the pdf
 build_images = TRUE

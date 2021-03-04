@@ -67,7 +67,7 @@ computations.  [[Rnoweb]] is the only user-visible component of this
 software.
 <<Rnoweb.R>>=
 <<comments and copyright>>
-Rnoweb = local({
+noweb = local({
     <<constants>>
     <<chunk information assembly>>
     <<document weaving>>
